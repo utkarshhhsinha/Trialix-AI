@@ -1,0 +1,63 @@
+{
+  "expo": {
+    "name": "TryME",
+    "slug": "TryME",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/images/defaultUser.png",
+    "scheme": "tryme",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.aura.virtualtrialroom"
+    },
+    "android": {
+      "package": "com.aura.virtualtrialroom",
+      "googleServicesFile": "./google-services.json",
+      "adaptiveIcon": {
+
+        "backgroundColor": "#E6F4FE",
+        "foregroundImage": "./assets/images/defaultUser.png"
+      },
+      "edgeToEdgeEnabled": true,
+      "predictiveBackGestureEnabled": false
+    },
+    "web": {
+      "output": "static",
+      "favicon": "./assets/images/favicon.png"
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/images/splash-icon.png",
+          "imageWidth": 200,
+          "resizeMode": "contain",
+          "backgroundColor": "#ffffff",
+          "dark": {
+            "backgroundColor": "#000000"
+          }
+        }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "compileSdkVersion": 35,
+            "targetSdkVersion": 35,
+            "kotlinVersion": "2.0.21",
+            "ndkVersion": "25.1.8937393"
+          }
+        }
+      ],
+      "@react-native-google-signin/google-signin"
+    ],
+
+    "experiments": {
+      "typedRoutes": true,
+      "reactCompiler": true
+    }
+  }
+}

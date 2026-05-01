@@ -1,0 +1,55 @@
+{
+  "project_info": {
+    "project_number": "574679078276",
+    "project_id": "aura-ai-powered-fashion-aura",
+    "storage_bucket": "aura-ai-powered-fashion-aura.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:574679078276:android:c50439741ecf0df580f9d1",
+        "android_client_info": {
+          "package_name": "com.aura.virtualtrialroom"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "574679078276-5amqqmdi1hnl9refighj6u9sf7213ta5.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.aura.virtualtrialroom",
+            "certificate_hash": "5e8f16062ea3cd2c4a0d547876baa6f38cabf625"
+          }
+        },
+        {
+          "client_id": "574679078276-u01hj2h28fg5q2kre3jekd6i61h2kggd.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.aura.virtualtrialroom",
+            "certificate_hash": "530afb011d9cbb1c795ace9fe1fce0c0af1ee779"
+          }
+        },
+        {
+          "client_id": "574679078276-rs497nr23vodbhmuni7s90rd0ul9sphl.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyA3EaFrDAqKqGF7XJJ7NG4mjULmIWDjEDY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "574679078276-rs497nr23vodbhmuni7s90rd0ul9sphl.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
