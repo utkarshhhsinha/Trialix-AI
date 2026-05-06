@@ -58,6 +58,7 @@ export default function Onboarding() {
 
     try {
       setUploading(true);
+      const token = await user.getIdToken();
       console.log('Initiating native upload for onboarding:', imageUri);
       
       const bucketOptions = [

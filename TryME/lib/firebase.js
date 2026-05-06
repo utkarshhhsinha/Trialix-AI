@@ -1,10 +1,14 @@
+import { Platform } from 'react-native';
 import { initializeApp, getApps } from 'firebase/app';
-import { getReactNativePersistence, initializeAuth, getAuth } from 'firebase/auth';
+import { 
+  getReactNativePersistence, 
+  initializeAuth, 
+  getAuth, 
+  browserLocalPersistence 
+} from 'firebase/auth';
 import { initializeFirestore, getFirestore } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-
-
 
 const firebaseConfig = {
   apiKey: process.env.EXPO_PUBLIC_FIREBASE_API_KEY,
@@ -15,13 +19,11 @@ const firebaseConfig = {
   appId: process.env.EXPO_PUBLIC_FIREBASE_APP_ID,
 };
 
-
 const isConfigured =
   !!firebaseConfig.apiKey &&
   !!firebaseConfig.projectId &&
   !!firebaseConfig.appId &&
   !!firebaseConfig.storageBucket;
-
 
 export const firebaseApp = isConfigured
   ? getApps().length
@@ -32,11 +34,12 @@ export const firebaseApp = isConfigured
 export const firebaseAuth = firebaseApp
   ? (() => {
       try {
-        return initializeAuth(firebaseApp, {
-          persistence: getReactNativePersistence(AsyncStorage),
-        });
+        const persistence = Platform.OS === 'web' 
+          ? browserLocalPersistence 
+          : getReactNativePersistence(AsyncStorage);
+          
+        return initializeAuth(firebaseApp, { persistence });
       } catch (e) {
-        // Already initialized (e.g. hot reload) — reuse existing instance
         return getAuth(firebaseApp);
       }
     })()
@@ -44,7 +47,8 @@ export const firebaseAuth = firebaseApp
 
 export const firestore = firebaseApp
   ? initializeFirestore(firebaseApp, {
-      experimentalForceLongPolling: true,
+      experimentalAutoDetectLongPolling: true,
+      ignoreUndefinedProperties: true,
     })
   : null;
 export const storage = firebaseApp ? getStorage(firebaseApp) : null;
@@ -52,4 +56,3 @@ export const storage = firebaseApp ? getStorage(firebaseApp) : null;
 export const firebaseConfigError = isConfigured
   ? null
   : 'Firebase is not configured. Fill EXPO_PUBLIC_FIREBASE_* values in .env and restart Expo.';
-

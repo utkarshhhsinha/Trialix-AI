@@ -13,7 +13,7 @@ import { onAuthStateChanged } from 'firebase/auth';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 
 import { firebaseAuth, firestore } from '@/lib/firebase';
-import { extractGarmentFromUrl, runVirtualTryOn } from '@/lib/ai';
+import { extractGarmentFromUrl, runVirtualTryOn } from '@/lib/ai_engine';
 import Icon from '@/assets/icons';
 import { theme } from '@/constants/theme';
 import { StatusBar } from 'expo-status-bar';
@@ -111,14 +111,48 @@ export default function AIStudio() {
   const INJECTED_JAVASCRIPT = `
     setTimeout(function() {
       try {
-        var ogImg = document.querySelector('meta[property="og:image"]');
-        var mainImg = document.querySelector('img[src*="flipkart.com/image"], #landingImage, #imgBlkFront, img');
-        var imgUrl = ogImg ? ogImg.content : (mainImg ? mainImg.src : null);
-        
+        // --- 1. TITLE EXTRACTION ---
         var ogTitle = document.querySelector('meta[property="og:title"]');
-        var titleElem = document.querySelector('h1, .B_NuCI, #productTitle');
+        var titleElem = document.querySelector('h1, #productTitle, .B_NuCI, .product-title-word-break');
         var title = ogTitle ? ogTitle.content : (titleElem ? titleElem.innerText : document.title);
         
+        // --- 2. IMAGE EXTRACTION (Prioritizing product-specific selectors) ---
+        var imgUrl = null;
+        
+        // Amazon specific selectors
+        var amazonImg = document.querySelector('#landingImage, #main-image, #imgBlkFront, .a-dynamic-image');
+        // Flipkart specific selectors
+        var flipkartImg = document.querySelector('img[src*="flipkart.com/image"], ._396cs4, ._2r_T1_');
+        
+        if (amazonImg) {
+          imgUrl = amazonImg.getAttribute('data-old-hires') || amazonImg.getAttribute('data-a-dynamic-image') || amazonImg.src;
+          // data-a-dynamic-image is a JSON string of URLs, we take the first key
+          if (imgUrl && imgUrl.startsWith('{')) {
+            try {
+              var keys = Object.keys(JSON.parse(imgUrl));
+              imgUrl = keys[keys.length - 1]; // Usually the largest one is last
+            } catch(e) {}
+          }
+        } else if (flipkartImg) {
+          imgUrl = flipkartImg.src;
+        }
+        
+        // Fallback to OG Image if not found yet or if it looks generic
+        if (!imgUrl || imgUrl.includes('amazon_logo') || imgUrl.includes('social_share')) {
+           var ogImg = document.querySelector('meta[property="og:image"]');
+           if (ogImg && ogImg.content && !ogImg.content.includes('amazon_logo') && !ogImg.content.includes('social_share')) {
+             imgUrl = ogImg.content;
+           }
+        }
+        
+        // Final fallback to any large-ish image
+        if (!imgUrl) {
+          var allImgs = Array.from(document.querySelectorAll('img'));
+          var bestImg = allImgs.find(i => i.width > 150 && i.height > 150 && !i.src.includes('logo') && !i.src.includes('banner'));
+          if (bestImg) imgUrl = bestImg.src;
+        }
+        
+        // --- 3. PRICE EXTRACTION ---
         var bodyText = document.body.innerText;
         var priceMatch = bodyText.match(/(₹|Rs\\.?|\\$)\\s?[0-9,]+(\\.[0-9]{2})?/i);
         var price = priceMatch ? priceMatch[0] : "Check site";
@@ -126,13 +160,13 @@ export default function AIStudio() {
         window.ReactNativeWebView.postMessage(JSON.stringify({
           success: true,
           imageUrl: imgUrl,
-          garmentDesc: title,
+          garmentDesc: title.trim(),
           price: price
         }));
       } catch(e) {
         window.ReactNativeWebView.postMessage(JSON.stringify({ success: false, error: e.toString() }));
       }
-    }, 4500); // Wait for React/Angular SPA to finish hydrating
+    }, 5000); 
     true;
   `;
 
@@ -181,12 +215,13 @@ export default function AIStudio() {
       if (user && firestore) {
         addDoc(collection(firestore, 'tryon_results'), {
           userId: user.uid,
-          outputUrl,
+          // We don't save the full Base64 to Firestore because it's too large (>1MB)
+          // In a production app, you would upload this to Firebase Storage first.
           garmentImageUrl: garmentData.imageUrl,
           garmentDesc: garmentData.garmentDesc,
           storeLink: storeLink.trim(),
           createdAt: serverTimestamp(),
-        }).catch(e => console.log('Firestore save error:', e));
+        }).catch(e => console.log('Firestore save error (Data too large, but image displayed):', e));
       }
     } catch (e) {
       setStage(STAGES.ERROR);
@@ -400,19 +435,21 @@ export default function AIStudio() {
                 </View>
               </View>
 
-              <Animated.View entering={FadeInDown.delay(400)} style={styles.compRow}>
-                <View style={styles.compCard}>
-                  <Image source={{ uri: userPhoto }} style={styles.compImg} resizeMode="cover" />
-                  <Text style={styles.compLabel}>Original</Text>
-                </View>
-                <View style={styles.arrowCircle}>
-                  <Icon name="send" size={16} color="white" />
-                </View>
-                <View style={styles.compCard}>
-                  <Image source={{ uri: garmentData.imageUrl }} style={styles.compImg} resizeMode="contain" />
-                  <Text style={styles.compLabel}>Garment</Text>
-                </View>
-              </Animated.View>
+              {garmentData && (
+                <Animated.View entering={FadeInDown.delay(400)} style={styles.compRow}>
+                  <View style={styles.compCard}>
+                    <Image source={{ uri: userPhoto }} style={styles.compImg} resizeMode="cover" />
+                    <Text style={styles.compLabel}>Original</Text>
+                  </View>
+                  <View style={styles.arrowCircle}>
+                    <Icon name="send" size={16} color="white" />
+                  </View>
+                  <View style={styles.compCard}>
+                    <Image source={{ uri: garmentData.imageUrl }} style={styles.compImg} resizeMode="contain" />
+                    <Text style={styles.compLabel}>Garment</Text>
+                  </View>
+                </Animated.View>
+              )}
             </Animated.View>
           )}
 

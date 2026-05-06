@@ -43,13 +43,10 @@ export default function Index() {
           setStatus('no-profile');
         }
       } catch (e) {
-        if (e.code === 'permission-denied') {
-          console.warn('AI: Permission denied for profile check, treating as new user.');
-          setStatus('no-profile');
-        } else {
-          console.error('Error fetching profile in index.jsx:', e);
-          setStatus('no-profile');
-        }
+        console.warn('AI: Profile check failed (Offline or Permission issue):', e.message);
+        // CRITICAL FIX: If Firestore is offline, allow them into the app anyway
+        // They can use the AI Studio even if we can't load their cloud profile.
+        setStatus('ready');
       }
     });
 

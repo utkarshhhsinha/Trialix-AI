@@ -10,7 +10,7 @@ import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { getDownloadURL, ref, uploadString } from 'firebase/storage';
 import { firebaseAuth, firestore, storage } from '../../lib/firebase';
-import { generateImageEmbedding } from '../../lib/ai';
+import { generateImageEmbedding } from '../../lib/ai_engine';
 import { theme } from '@/constants/theme';
 import { StatusBar } from 'expo-status-bar';
 import Icon from '../../assets/icons';

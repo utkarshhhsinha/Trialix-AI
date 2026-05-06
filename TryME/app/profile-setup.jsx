@@ -10,7 +10,7 @@ import { onAuthStateChanged } from 'firebase/auth';
 import { doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore';
 import { getDownloadURL, ref, uploadString } from 'firebase/storage';
 import { firebaseAuth, firestore, storage, firebaseConfigError } from '@/lib/firebase';
-import { generateImageEmbedding } from '@/lib/ai'; 
+import { generateImageEmbedding } from '@/lib/ai_engine'; 
 import { theme } from '@/constants/theme';
 import { StatusBar } from 'expo-status-bar';
 import Icon from '@/assets/icons';
@@ -72,12 +72,12 @@ export default function ProfileSetup() {
           if (u.photoURL) { setImageUri(u.photoURL); setPhotoMode('google'); }
         }
       } catch (e) {
-        if (e.code === 'permission-denied') {
-          console.warn('AI: Firestore permissions are restrictive. Falling back to local auth data.');
-          if (u.displayName) setName(u.displayName);
-          if (u.photoURL) { setImageUri(u.photoURL); setPhotoMode('google'); }
-        } else {
-          console.error('Error pre-loading profile:', e);
+        console.warn('AI: Could not pre-load cloud profile (Offline or Permission issue). Falling back to Auth data:', e.message);
+        // Fallback to Auth data for any error (offline, permission, etc)
+        if (u.displayName) setName(u.displayName);
+        if (u.photoURL) { 
+          setImageUri(u.photoURL); 
+          setPhotoMode('google'); 
         }
       }
     });

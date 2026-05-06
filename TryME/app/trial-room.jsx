@@ -6,7 +6,7 @@ import {
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { collection, addDoc, serverTimestamp, query, where, getDocs } from 'firebase/firestore';
 import { firebaseAuth, firestore } from '@/lib/firebase';
-import { runTryOn } from '@/lib/tryon';
+import { runVirtualTryOn } from '@/lib/ai_engine';
 import { theme } from '@/constants/theme';
 import { StatusBar } from 'expo-status-bar';
 import Icon from '@/assets/icons';
@@ -30,6 +30,7 @@ export default function TrialRoom() {
   } = params;
 
   const [processing, setProcessing] = useState(true);
+  const [statusText, setStatusText] = useState('✨ AI dressing you up...');
   const [resultUrl, setResultUrl] = useState(null);
   const [saved, setSaved] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -59,7 +60,12 @@ export default function TrialRoom() {
     try {
       const garmentUrl = productImageUrl || '';
       const modelUrl = basePhotoUrl || '';
-      const result = await runTryOn(modelUrl, garmentUrl);
+      const result = await runVirtualTryOn(
+        modelUrl, 
+        garmentUrl, 
+        productTitle || 'clothing',
+        (status) => setStatusText(status)
+      );
       setResultUrl(result);
     } catch (e) {
       Alert.alert('Try-on failed', e.message);
@@ -145,7 +151,7 @@ export default function TrialRoom() {
             />
             <View style={styles.processingOverlay}>
               <ActivityIndicator size="large" color="white" />
-              <Text style={styles.processingText}>✨ AI dressing you up...</Text>
+              <Text style={styles.processingText}>{statusText}</Text>
               <Text style={styles.processingSubText}>This takes a few seconds</Text>
             </View>
           </Animated.View>
@@ -218,7 +224,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0, 35, 102, 0.7)',
     justifyContent: 'center', alignItems: 'center', gap: 12,
   },
-  processingText: { color: 'white', fontSize: 18, fontWeight: theme.fonts.bold },
+  processingText: { color: 'white', fontSize: 18, fontWeight: theme.fonts.bold, textAlign: 'center', paddingHorizontal: 20 },
   processingSubText: { color: 'rgba(255,255,255,0.7)', fontSize: 14 },
   resultView: { flex: 1 },
   resultImage: { width: '100%', height: '100%' },

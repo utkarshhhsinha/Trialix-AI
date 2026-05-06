@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "TryME",
-    "slug": "TryME",
+    "slug": "tryme",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/defaultUser.png",
@@ -16,7 +16,6 @@
       "package": "com.aura.virtualtrialroom",
       "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
-
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/images/defaultUser.png"
       },
@@ -52,12 +51,19 @@
           }
         }
       ],
-      "@react-native-google-signin/google-signin"
+      "@react-native-google-signin/google-signin",
+      "expo-asset"
     ],
-
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
-    }
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "70e57dac-654a-46f6-8ac7-1af7e4bee87c"
+      }
+    },
+    "owner": "ascendras-organization"
   }
 }

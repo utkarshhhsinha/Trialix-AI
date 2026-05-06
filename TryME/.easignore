@@ -1,0 +1,12 @@
+node_modules
+.git
+.expo
+dist
+build
+android
+ios
+*.log
+coverage
+.env
+google-services.json
+GoogleService-Info.plist
