@@ -20,7 +20,12 @@
         "foregroundImage": "./assets/images/defaultUser.png"
       },
       "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "packagingOptions": {
+        "pickFirst": [
+          "**/libc++_shared.so"
+        ]
+      }
     },
     "web": {
       "output": "static",
