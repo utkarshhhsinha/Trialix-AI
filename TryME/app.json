@@ -1,31 +1,28 @@
 {
   "expo": {
-    "name": "TryME",
+    "name": "Trialix AI",
     "slug": "tryme",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "orientation": "portrait",
-    "icon": "./assets/images/defaultUser.png",
+    "icon": "./assets/images/icon.png",
     "scheme": "tryme",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.aura.virtualtrialroom"
+      "bundleIdentifier": "com.aura.virtualtrialroom",
+      "buildNumber": "2"
     },
     "android": {
       "package": "com.aura.virtualtrialroom",
       "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
-        "foregroundImage": "./assets/images/defaultUser.png"
+        "backgroundColor": "#FE3C72",
+        "foregroundImage": "./assets/images/adaptive-icon.png"
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
-      "packagingOptions": {
-        "pickFirst": [
-          "**/libc++_shared.so"
-        ]
-      }
+      "versionCode": 2
     },
     "web": {
       "output": "static",
@@ -34,34 +31,35 @@
     "plugins": [
       "expo-router",
       [
-        "expo-splash-screen",
-        {
-          "image": "./assets/images/splash-icon.png",
-          "imageWidth": 200,
-          "resizeMode": "contain",
-          "backgroundColor": "#ffffff",
-          "dark": {
-            "backgroundColor": "#000000"
-          }
-        }
-      ],
-      [
         "expo-build-properties",
         {
           "android": {
             "compileSdkVersion": 35,
             "targetSdkVersion": 35,
-            "kotlinVersion": "2.0.21",
-            "ndkVersion": "25.1.8937393"
+            "kotlinVersion": "2.1.20",
+            "ndkVersion": "25.1.8937393",
+            "newArchEnabled": true,
+            "packagingOptions": {
+              "pickFirst": [
+                "**/libc++_shared.so"
+              ]
+            }
           }
         }
       ],
       "@react-native-google-signin/google-signin",
-      "expo-asset"
+      "expo-asset",
+      [
+        "expo-media-library",
+        {
+          "photosPermission": "Allow Trialix AI to access your photos.",
+          "savePhotosPermission": "Allow Trialix AI to save photos to your library."
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,
-      "reactCompiler": true
+      "reactCompiler": false
     },
     "extra": {
       "router": {},
@@ -69,6 +67,12 @@
         "projectId": "70e57dac-654a-46f6-8ac7-1af7e4bee87c"
       }
     },
-    "owner": "ascendras-organization"
+    "owner": "ascendras-organization",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/70e57dac-654a-46f6-8ac7-1af7e4bee87c"
+    }
   }
 }

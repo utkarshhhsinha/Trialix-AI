@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Alert, Image, StyleSheet, Text, View, Pressable } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system/legacy';
+import * as ImageManipulator from 'expo-image-manipulator';
 import ScreenWrapper from '../components/ScreenWrapper';
 import Button from '../components/Button';
 import { theme } from '@/constants/theme';
@@ -59,7 +60,24 @@ export default function Onboarding() {
     try {
       setUploading(true);
       const token = await user.getIdToken();
-      console.log('Initiating native upload for onboarding:', imageUri);
+
+      let localFileToUpload = imageUri;
+      let isTempCompressed = false;
+
+      // Compress user image before uploading to Firebase Storage to optimize size
+      try {
+        const compressed = await ImageManipulator.manipulateAsync(
+          imageUri,
+          [{ resize: { width: 1080 } }],
+          { compress: 0.8, format: ImageManipulator.SaveFormat.JPEG }
+        );
+        localFileToUpload = compressed.uri;
+        isTempCompressed = true;
+      } catch (err) {
+        console.warn('[Onboarding] Client compression failed, uploading original:', err.message);
+      }
+
+      console.log('Initiating native upload for onboarding:', localFileToUpload);
       
       const bucketOptions = [
         "aura-ai-powered-fashion-aura.firebasestorage.app",
@@ -78,22 +96,22 @@ export default function Onboarding() {
         const variations = [
           {
             url: `https://firebasestorage.googleapis.com/v0/b/${encodeURIComponent(bucketName).replace(/\./g, '%2E')}/o?uploadType=media&name=${path}`,
-            headers: { 'Authorization': `Firebase ${token}`, 'Content-Type': 'image/jpeg' }
+            headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'image/jpeg' }
           },
           {
             url: `https://firebasestorage.googleapis.com/v0/b/${encodeURIComponent(bucketName).replace(/\./g, '%2E')}/o?name=${path}`,
-            headers: { 'Authorization': `Firebase ${token}`, 'Content-Type': 'image/jpeg' }
+            headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'image/jpeg' }
           },
           {
             url: `https://storage.googleapis.com/upload/storage/v1/b/${encodeURIComponent(bucketName).replace(/\./g, '%2E')}/o?uploadType=media&name=${path}`,
-            headers: { 'Authorization': `Firebase ${token}`, 'Content-Type': 'image/jpeg' }
+            headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'image/jpeg' }
           }
         ];
 
         for (const variant of variations) {
           try {
             console.log(`Onboarding: Trying ${variant.url.split('?')[0]} [Bucket: ${bucketName}]`);
-            const uploadRes = await FileSystem.uploadAsync(variant.url, imageUri, {
+            const uploadRes = await FileSystem.uploadAsync(variant.url, localFileToUpload, {
               httpMethod: 'POST',
               uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT,
               headers: variant.headers,
@@ -113,31 +131,13 @@ export default function Onboarding() {
         }
       }
 
+      // Clean up compressed temp file
+      if (isTempCompressed && localFileToUpload.includes(FileSystem.cacheDirectory)) {
+        FileSystem.deleteAsync(localFileToUpload, { idempotent: true }).catch(() => {});
+      }
+
       if (!successRes) {
-        console.log("Onboarding Storage upload failed, attempting Firestore Base64 fallback...");
-        const base64 = await FileSystem.readAsStringAsync(imageUri, { encoding: FileSystem.EncodingType.Base64 });
-        if (base64.length > 800000) {
-          throw new Error("Photo too large for backup storage. Please initialize Firebase Storage in your console.");
-        }
-        const basePhotoUrl = `data:image/jpeg;base64,${base64}`;
-        console.log('Onboarding photo stored via Firestore fallback!');
-        
-        const profileRef = doc(firestore, 'profiles', user.uid);
-        const existing = await getDoc(profileRef);
-        await setDoc(
-          profileRef,
-          {
-            id: user.uid,
-            email: user.email ?? null,
-            displayName: user.displayName ?? null,
-            basePhotoUrl,
-            createdAt: existing.exists() ? existing.data()?.createdAt ?? serverTimestamp() : serverTimestamp(),
-            updatedAt: serverTimestamp(),
-          },
-          { merge: true }
-        );
-        router.replace('/swipe');
-        return;
+        throw new Error("Failed to upload base photo to Firebase Storage. Please check your internet connection.");
       }
 
       const basePhotoUrl = `https://firebasestorage.googleapis.com/v0/b/${finalBucket}/o/${finalPath}?alt=media`;
@@ -160,7 +160,41 @@ export default function Onboarding() {
 
       router.replace('/swipe');
     } catch (e) {
-      Alert.alert('Upload failed', e?.message ?? 'Unknown error');
+      Alert.alert(
+        'Upload Failed',
+        'Firebase Storage is not enabled on this project. Would you like to use a default profile photo to complete your onboarding?',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Use Default Photo',
+            onPress: async () => {
+              setUploading(true);
+              try {
+                const defaultPhoto = 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=450&q=80';
+                const profileRef = doc(firestore, 'profiles', user.uid);
+                const existing = await getDoc(profileRef);
+                await setDoc(
+                  profileRef,
+                  {
+                    id: user.uid,
+                    email: user.email ?? null,
+                    displayName: user.displayName ?? null,
+                    basePhotoUrl: defaultPhoto,
+                    createdAt: existing.exists() ? existing.data()?.createdAt ?? serverTimestamp() : serverTimestamp(),
+                    updatedAt: serverTimestamp(),
+                  },
+                  { merge: true }
+                );
+                router.replace('/swipe');
+              } catch (saveErr) {
+                Alert.alert('Save failed', saveErr.message);
+              } finally {
+                setUploading(false);
+              }
+            }
+          }
+        ]
+      );
     } finally {
       setUploading(false);
     }
@@ -310,5 +344,3 @@ const styles = StyleSheet.create({
     height: 56,
   }
 });
-
-

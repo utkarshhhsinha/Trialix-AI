@@ -1,22 +1,34 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   Alert, Image, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity,
-  View, Animated, KeyboardAvoidingView, Platform, Pressable
+  View, Animated, KeyboardAvoidingView, Platform, Pressable, Dimensions, ActivityIndicator,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system/legacy';
+import * as ImageManipulator from 'expo-image-manipulator';
 import { useRouter } from 'expo-router';
 import { onAuthStateChanged } from 'firebase/auth';
 import { doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore';
-import { getDownloadURL, ref, uploadString } from 'firebase/storage';
-import { firebaseAuth, firestore, storage, firebaseConfigError } from '@/lib/firebase';
-import { generateImageEmbedding } from '@/lib/ai_engine'; 
-import { theme } from '@/constants/theme';
+import { firebaseAuth, firestore, storage } from '@/lib/firebase';
+import { generateImageEmbedding } from '@/lib/ai_engine';
 import { StatusBar } from 'expo-status-bar';
-import Icon from '@/assets/icons';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { LinearGradient } from 'expo-linear-gradient';
+import { Ionicons } from '@expo/vector-icons';
+import TrialixLogo from '@/components/TrialixLogo';
+
+const { width: W } = Dimensions.get('window');
+const PHOTO_W = W - 80;
+const PHOTO_H = PHOTO_W * 1.25;
 
 const GENDERS = ['Male', 'Female', 'Non-binary', 'Prefer not to say'];
-const STEPS = ['Profile Photo', 'Personal Info', 'Style Preferences'];
+const STEPS = ['Photo', 'About you', 'Ready'];
+
+const STEP_META = [
+  { title: 'Add your best photo', sub: 'Full-body shots work best for AI try-on magic ✨', emoji: '📸' },
+  { title: 'Tell us about you', sub: 'So we can personalize your style feed', emoji: '✨' },
+  { title: "You're ready to slay", sub: 'Swipe right on outfits and try them on instantly', emoji: '🔥' },
+];
 
 export default function ProfileSetup() {
   const router = useRouter();
@@ -24,21 +36,20 @@ export default function ProfileSetup() {
   const [step, setStep] = useState(0);
   const [saving, setSaving] = useState(false);
 
-  // Form fields
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [gender, setGender] = useState('');
   const [imageUri, setImageUri] = useState(null);
   const [imageUrl, setImageUrl] = useState('');
-  const [photoMode, setPhotoMode] = useState('gallery'); // 'gallery' | 'url' | 'google'
+  const [photoMode, setPhotoMode] = useState('gallery');
 
   const fadeAnim = useRef(new Animated.Value(0)).current;
-  const slideAnim = useRef(new Animated.Value(30)).current;
+  const slideAnim = useRef(new Animated.Value(24)).current;
 
   useEffect(() => {
     Animated.parallel([
-      Animated.timing(fadeAnim, { toValue: 1, duration: 400, useNativeDriver: true }),
-      Animated.timing(slideAnim, { toValue: 0, duration: 400, useNativeDriver: true }),
+      Animated.timing(fadeAnim, { toValue: 1, duration: 350, useNativeDriver: true }),
+      Animated.spring(slideAnim, { toValue: 0, friction: 8, tension: 80, useNativeDriver: true }),
     ]).start();
   }, [step]);
 
@@ -47,8 +58,7 @@ export default function ProfileSetup() {
     const unsub = onAuthStateChanged(firebaseAuth, async (u) => {
       if (!u) { router.replace('/login'); return; }
       setUser(u);
-      
-      // Fetch existing profile from Firestore
+
       try {
         const snap = await getDoc(doc(firestore, 'profiles', u.uid));
         if (snap.exists()) {
@@ -60,25 +70,18 @@ export default function ProfileSetup() {
             setImageUri(data.basePhotoUrl);
             setPhotoMode('google');
             if (data.name) {
-              console.log('Profile complete, bypassing setup...');
               router.replace('/(tabs)/discover');
             } else {
               setStep(1);
             }
           }
         } else {
-          // Fallback to Auth data if no Firestore profile
           if (u.displayName) setName(u.displayName);
           if (u.photoURL) { setImageUri(u.photoURL); setPhotoMode('google'); }
         }
       } catch (e) {
-        console.warn('AI: Could not pre-load cloud profile (Offline or Permission issue). Falling back to Auth data:', e.message);
-        // Fallback to Auth data for any error (offline, permission, etc)
         if (u.displayName) setName(u.displayName);
-        if (u.photoURL) { 
-          setImageUri(u.photoURL); 
-          setPhotoMode('google'); 
-        }
+        if (u.photoURL) { setImageUri(u.photoURL); setPhotoMode('google'); }
       }
     });
     return () => unsub();
@@ -86,103 +89,109 @@ export default function ProfileSetup() {
 
   const animateToNextStep = (nextStep) => {
     fadeAnim.setValue(0);
-    slideAnim.setValue(30);
+    slideAnim.setValue(24);
     setStep(nextStep);
   };
 
   const pickFromGallery = async () => {
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!perm.granted) { Alert.alert('Permission needed'); return; }
+    if (!perm.granted) { Alert.alert('Permission needed', 'Allow photo access to continue.'); return; }
     const res = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'], quality: 0.2, allowsEditing: true, aspect: [3, 4],
+      mediaTypes: ['images'], quality: 0.85, allowsEditing: true, aspect: [3, 4], base64: true,
     });
-    if (!res.canceled) { setImageUri(res.assets[0].uri); setPhotoMode('gallery'); }
+    if (!res.canceled) {
+      const asset = res.assets[0];
+      // Copy to permanent storage immediately — ImagePicker cache is ephemeral on Android
+      const permUri = `${FileSystem.documentDirectory}profile_photo_${Date.now()}.jpg`;
+      if (asset.base64) {
+        await FileSystem.writeAsStringAsync(permUri, asset.base64, { encoding: 'base64' });
+      } else {
+        await FileSystem.copyAsync({ from: asset.uri, to: permUri });
+      }
+      setImageUri(permUri);
+      setPhotoMode('gallery');
+    }
   };
-  
+
   const uploadPhoto = async () => {
     if (!imageUri || photoMode === 'url') return imageUrl || imageUri;
-    if (photoMode === 'google') return imageUri; // Google photo URL, no upload needed
-    if (!storage) return imageUri; // No storage configured, return local URI
+    if (photoMode === 'google') return imageUri;
+    if (!storage) return imageUri;
 
-    console.log('Initiating native upload for ProfileSetup:', imageUri);
     const uid = user?.uid || firebaseAuth?.currentUser?.uid || ('guest_' + Date.now());
-    
+    let localFileToUpload = imageUri;
+    let isTempCompressed = false;
+
     try {
+      // Compress user image before uploading to Firebase Storage to optimize size
+      try {
+        const compressed = await ImageManipulator.manipulateAsync(
+          imageUri,
+          [{ resize: { width: 1080 } }],
+          { compress: 0.8, format: ImageManipulator.SaveFormat.JPEG }
+        );
+        localFileToUpload = compressed.uri;
+        isTempCompressed = true;
+      } catch (err) {
+        console.warn('[Profile] Client compression failed, uploading original:', err.message);
+      }
+
       const token = await firebaseAuth.currentUser.getIdToken();
       const sdkBucket = storage?.app?.options?.storageBucket;
-      
       const bucketOptions = [
         sdkBucket,
-        "aura-ai-powered-fashion-aura.firebasestorage.app",
-        "aura-ai-powered-fashion-aura.appspot.com",
-        "aura-ai-powered-fashion-aura"
+        'aura-ai-powered-fashion-aura.firebasestorage.app',
+        'aura-ai-powered-fashion-aura.appspot.com',
+        'aura-ai-powered-fashion-aura',
       ].filter(Boolean);
 
       let successRes = null;
-      let finalPath = "";
-      let finalBucket = "";
+      let finalPath = '';
+      let finalBucket = '';
 
       for (const bucketName of bucketOptions) {
         if (successRes) break;
         const path = encodeURIComponent(`base-photos/${uid}.jpg`);
-        
         const variations = [
           {
             url: `https://firebasestorage.googleapis.com/v0/b/${encodeURIComponent(bucketName).replace(/\./g, '%2E')}/o?uploadType=media&name=${path}`,
-            headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'image/jpeg' }
+            headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'image/jpeg' },
           },
-          {
-            url: `https://firebasestorage.googleapis.com/v0/b/${encodeURIComponent(bucketName).replace(/\./g, '%2E')}/o?name=${path}`,
-            headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'image/jpeg' }
-          },
-          {
-            url: `https://storage.googleapis.com/upload/storage/v1/b/${encodeURIComponent(bucketName).replace(/\./g, '%2E')}/o?uploadType=media&name=${path}`,
-            headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'image/jpeg' }
-          }
         ];
 
         for (const variant of variations) {
           try {
-            console.log(`ProfileSetup: Trying ${variant.url.split('?')[0]} [Bucket: ${bucketName}]`);
-            const uploadRes = await FileSystem.uploadAsync(variant.url, imageUri, {
+            const uploadRes = await FileSystem.uploadAsync(variant.url, localFileToUpload, {
               httpMethod: 'POST',
               uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT,
               headers: variant.headers,
             });
-
             if (uploadRes.status === 200) {
               successRes = JSON.parse(uploadRes.body);
               finalPath = path;
               finalBucket = bucketName;
               break;
-            } else {
-              console.log(`ProfileSetup: Failed (${uploadRes.status}): ${uploadRes.body.substring(0, 40)}`);
             }
-          } catch (e) {
-            console.log(`ProfileSetup: Error:`, e.message);
-          }
+          } catch (_) { /* try next */ }
         }
       }
 
-      if (successRes) {
-        const downloadUrl = `https://firebasestorage.googleapis.com/v0/b/${finalBucket}/o/${finalPath}?alt=media`;
-        console.log('Photo uploaded successfully via native fallback! URL:', downloadUrl);
-        return downloadUrl;
-      } else {
-        console.log("Storage upload failed, attempting Firestore Base64 fallback (optimized)...");
-        const base64 = await FileSystem.readAsStringAsync(imageUri, { encoding: FileSystem.EncodingType.Base64 });
-        const base64Length = base64.length;
-        
-        if (base64Length > 1048487) { // 1MB Firestore limit safety margin
-          console.warn(`Photo too large for Firestore (${base64Length} chars). Falling back to placeholder.`);
-          return user?.photoURL || ''; 
-        }
-        
-        console.log(`Firestore fallback success: ${base64Length} chars.`);
-        return `data:image/jpeg;base64,${base64}`;
+      // Clean up compressed temp file
+      if (isTempCompressed && localFileToUpload.includes(FileSystem.cacheDirectory)) {
+        FileSystem.deleteAsync(localFileToUpload, { idempotent: true }).catch(() => {});
       }
+
+      if (successRes) {
+        return `https://firebasestorage.googleapis.com/v0/b/${finalBucket}/o/${finalPath}?alt=media`;
+      }
+
+      throw new Error('Failed to upload photo to Firebase Storage. Please check your internet connection.');
     } catch (uploadErr) {
-      console.error('Native upload error in ProfileSetup:', uploadErr);
+      // Clean up compressed temp file on error
+      if (isTempCompressed && localFileToUpload.includes(FileSystem.cacheDirectory)) {
+        FileSystem.deleteAsync(localFileToUpload, { idempotent: true }).catch(() => {});
+      }
+      console.error('Upload error:', uploadErr);
       throw uploadErr;
     }
   };
@@ -192,58 +201,33 @@ export default function ProfileSetup() {
     const photoSrc = imageUri || imageUrl;
     if (!photoSrc) { Alert.alert('Required', 'Please add a profile photo.'); return; }
 
-    // For guest mode (no Firebase user), generate a temporary local ID
     let uid = user?.uid || firebaseAuth?.currentUser?.uid;
-    
     if (!uid) {
-      console.log('No user UID found, checking auth state...');
-      if (firebaseAuth?.currentUser) {
-        uid = firebaseAuth.currentUser.uid;
-      } else {
-        // Wait a bit or error out if truly not logged in
-        Alert.alert('Authentication required', 'Please wait for your login to complete or try logging in again.');
-        return;
-      }
+      Alert.alert('Authentication required', 'Please log in again.');
+      return;
     }
 
     setSaving(true);
-    console.log('Profile save started for UID:', uid);
-    
-    // Safety timeout to prevent infinite hang
     const timeoutId = setTimeout(() => {
-      if (saving) {
-        setSaving(false);
-        Alert.alert('Save Timeout', 'The connection to Firebase is taking too long. Please check your internet and try again.');
-      }
+      setSaving(false);
+      Alert.alert('Save Timeout', 'Check your connection and try again.');
     }, 15000);
 
     try {
-      console.log('Uploading photo...');
       let basePhotoUrl = await uploadPhoto();
-      // If upload returned null (too large, storage not set up), fall back to Google photo
-      if (!basePhotoUrl) {
-        basePhotoUrl = user?.photoURL || '';
-        console.log('Using fallback photo URL:', basePhotoUrl || '(none)');
-      }
-      console.log('Photo URL resolved:', basePhotoUrl);
-      
+      if (!basePhotoUrl) basePhotoUrl = user?.photoURL || '';
+
       if (!firestore) {
-        console.log('Firestore not initialized, skipping DB write.');
         clearTimeout(timeoutId);
         router.replace('/(tabs)/discover');
         return;
       }
 
-      console.log('Generating style embeddings (AI Processing)...');
       let visualEmbedding = null;
       try {
-        // Embedgings take ~1-2s - we use the photoSrc (URL or Base64)
         visualEmbedding = await generateImageEmbedding(basePhotoUrl);
-      } catch (embErr) {
-        console.warn('Embedding generation error (skipping):', embErr);
-      }
-      
-      console.log('Writing to Firestore...');
+      } catch (_) { /* optional */ }
+
       await setDoc(doc(firestore, 'profiles', uid), {
         id: uid,
         name: name.trim(),
@@ -251,314 +235,583 @@ export default function ProfileSetup() {
         phone: phone.trim(),
         gender,
         basePhotoUrl: basePhotoUrl || '',
-        visualEmbedding: visualEmbedding || [], // Storing the CLIP vector!
+        visualEmbedding: visualEmbedding || [],
         visualProcessed: !!visualEmbedding,
         isGuest: !user,
         photoStoragePath: `base-photos/${uid}.jpg`,
-        preferences: {
-          gender: gender || 'all',
-          sizes: [],
-          styles: [],
-        },
+        preferences: { gender: gender || 'all', sizes: [], styles: [] },
         wishlistCount: 0,
         tryOnCount: 0,
+        auraPoints: 50,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       }, { merge: true });
 
-      console.log('Profile & AI Embedding success!');
       clearTimeout(timeoutId);
       router.replace('/(tabs)/discover');
     } catch (e) {
-      console.error('Save error:', e);
       clearTimeout(timeoutId);
-      
       if (e.code === 'permission-denied') {
-        console.warn('AI: Permission denied by Firestore. Bypassing save to allow local testing.');
         Alert.alert(
-          'Firebase Permissions Restricted',
-          'We couldn\'t save your profile to the cloud, but you can still use the app locally for now.\n\nRemember to update your Firestore Rules later!',
-          [{ text: 'Continue Anyway', onPress: () => router.replace('/(tabs)/discover') }]
+          'Cloud save restricted',
+          'Continue locally for now — update Firestore rules later.',
+          [{ text: 'Continue', onPress: () => router.replace('/(tabs)/discover') }]
         );
       } else {
-        Alert.alert('Save failed', e.message);
+        // Fallback option in case Firebase Storage is not provisioned or active
+        Alert.alert(
+          'Upload Failed',
+          'Firebase Storage is not enabled on this project. Would you like to use a default profile photo to complete your setup?',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            {
+              text: 'Use Default Photo',
+              onPress: async () => {
+                setSaving(true);
+                try {
+                  const defaultPhoto = 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=450&q=80';
+                  let visualEmbedding = [];
+                  try {
+                    visualEmbedding = await generateImageEmbedding(defaultPhoto);
+                  } catch (_) {}
+                  
+                  await setDoc(doc(firestore, 'profiles', uid), {
+                    id: uid,
+                    name: name.trim(),
+                    email: user?.email || '',
+                    phone: phone.trim(),
+                    gender,
+                    basePhotoUrl: defaultPhoto,
+                    visualEmbedding: visualEmbedding,
+                    visualProcessed: !!visualEmbedding.length,
+                    isGuest: !user,
+                    photoStoragePath: '',
+                    preferences: { gender: gender || 'all', sizes: [], styles: [] },
+                    wishlistCount: 0,
+                    tryOnCount: 0,
+                    auraPoints: 50,
+                    createdAt: serverTimestamp(),
+                    updatedAt: serverTimestamp(),
+                  }, { merge: true });
+                  
+                  router.replace('/(tabs)/discover');
+                } catch (saveErr) {
+                  Alert.alert('Save failed', saveErr.message);
+                } finally {
+                  setSaving(false);
+                }
+              }
+            }
+          ]
+        );
       }
     } finally {
       setSaving(false);
     }
   };
 
+  const goNext = () => {
+    if (step === 0 && !imageUri && !imageUrl) {
+      Alert.alert('Photo required', 'Add a photo so AI can dress you virtually.');
+      return;
+    }
+    if (step === 1 && !name.trim()) {
+      Alert.alert('Name required', 'Enter your name to continue.');
+      return;
+    }
+    if (step < STEPS.length - 1) animateToNextStep(step + 1);
+    else saveProfile();
+  };
 
-  const currentPhoto = imageUri || (imageUrl ? imageUrl : null);
+  const currentPhoto = imageUri || imageUrl || null;
+  const meta = STEP_META[step];
 
   return (
-    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <StatusBar style="dark" />
-      <View style={styles.container}>
-        {/* Progress Bar */}
-        <View style={styles.progressContainer}>
-          {STEPS.map((s, i) => (
-            <View key={i} style={styles.progressStep}>
-              <View style={[styles.progressDot, i <= step && styles.progressDotActive]}>
-                {i < step && <Icon name="arrowLeft" size={12} color="white" />}
-                {i === step && <View style={styles.progressDotInner} />}
-              </View>
-              {i < STEPS.length - 1 && (
-                <View style={[styles.progressLine, i < step && styles.progressLineActive]} />
-              )}
-            </View>
-          ))}
-        </View>
+    <View style={styles.root}>
+      <StatusBar style="light" />
+      <LinearGradient
+        colors={['#A05A3E', '#C4785A', '#E8A882']}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={StyleSheet.absoluteFill}
+      />
+      <View style={[styles.orb, styles.orb1]} />
+      <View style={[styles.orb, styles.orb2]} />
 
-        <Animated.View style={{ opacity: fadeAnim, transform: [{ translateY: slideAnim }], flex: 1 }}>
-          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
-
-            {/* STEP 0: Photo Upload */}
-            {step === 0 && (
-              <View style={styles.stepContainer}>
-                <Text style={styles.stepTitle}>Add Your Photo</Text>
-                <Text style={styles.stepSub}>This will be used to virtually try on clothes</Text>
-
-                <Pressable onPress={pickFromGallery} style={styles.photoArea}>
-                  {currentPhoto ? (
-                    <Image source={{ uri: currentPhoto }} style={styles.photoPreview} />
-                  ) : (
-                    <View style={styles.photoPlaceholder}>
-                      <Icon name="camera" color={theme.colors.primary} size={36} strokeWidth={2} />
-                      <Text style={styles.photoPlaceholderText}>Tap to upload</Text>
-                      <Text style={styles.photoPlaceholderSub}>Use a clear full-body photo</Text>
-                    </View>
-                  )}
-                  {currentPhoto && (
-                    <View style={styles.photoEditBadge}>
-                      <Icon name="edit" color="white" size={16} />
-                    </View>
-                  )}
-                </Pressable>
-
-                <View style={styles.photoOptions}>
-                  <TouchableOpacity style={[styles.photoOption, photoMode === 'gallery' && styles.photoOptionActive]} onPress={pickFromGallery}>
-                    <Icon name="image" size={18} color={photoMode === 'gallery' ? theme.colors.primary : theme.colors.textLight} />
-                    <Text style={[styles.photoOptionText, photoMode === 'gallery' && styles.photoOptionTextActive]}>Gallery</Text>
-                  </TouchableOpacity>
-                  {user?.photoURL && (
-                    <TouchableOpacity
-                      style={[styles.photoOption, photoMode === 'google' && styles.photoOptionActive]}
-                      onPress={() => { setImageUri(user.photoURL); setPhotoMode('google'); }}
-                    >
-                      <Icon name="user" size={18} color={photoMode === 'google' ? theme.colors.primary : theme.colors.textLight} />
-                      <Text style={[styles.photoOptionText, photoMode === 'google' && styles.photoOptionTextActive]}>Google</Text>
-                    </TouchableOpacity>
-                  )}
-                  <TouchableOpacity style={[styles.photoOption, photoMode === 'url' && styles.photoOptionActive]} onPress={() => setPhotoMode('url')}>
-                    <Icon name="send" size={18} color={photoMode === 'url' ? theme.colors.primary : theme.colors.textLight} />
-                    <Text style={[styles.photoOptionText, photoMode === 'url' && styles.photoOptionTextActive]}>URL</Text>
-                  </TouchableOpacity>
-                </View>
-
-                {photoMode === 'url' && (
-                  <TextInput
-                    style={styles.input}
-                    placeholder="Paste photo URL..."
-                    placeholderTextColor={theme.colors.textLight}
-                    value={imageUrl}
-                    onChangeText={setImageUrl}
-                    onEndEditing={() => { if (imageUrl) setImageUri(imageUrl); }}
-                    autoCapitalize="none"
-                    keyboardType="url"
-                  />
-                )}
-              </View>
+      <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
+        <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+          {/* Top bar */}
+          <View style={styles.topBar}>
+            {step > 0 ? (
+              <Pressable style={styles.backCircle} onPress={() => animateToNextStep(step - 1)}>
+                <Ionicons name="chevron-back" size={22} color="white" />
+              </Pressable>
+            ) : (
+              <Pressable
+                style={styles.backCircle}
+                onPress={async () => {
+                  try {
+                    if (firebaseAuth) await firebaseAuth.signOut();
+                    router.replace('/login');
+                  } catch (e) {
+                    Alert.alert('Sign Out Error', e.message);
+                  }
+                }}
+              >
+                <Ionicons name="log-out-outline" size={22} color="white" />
+              </Pressable>
             )}
+            <TrialixLogo size={40} showRing={false} />
+            <Text style={styles.stepCounter}>{step + 1}/{STEPS.length}</Text>
+          </View>
 
-            {/* STEP 1: Personal Info */}
-            {step === 1 && (
-              <View style={styles.stepContainer}>
-                <Text style={styles.stepTitle}>About You</Text>
-                <Text style={styles.stepSub}>Help us personalize your experience</Text>
+          {/* Progress pills */}
+          <View style={styles.progressRow}>
+            {STEPS.map((_, i) => (
+              <View key={i} style={[styles.progressPill, i <= step && styles.progressPillActive]} />
+            ))}
+          </View>
 
-                <View style={styles.inputGroup}>
-                  <Text style={styles.inputLabel}>Full Name</Text>
-                  <View style={styles.inputContainer}>
-                    <Icon name="user" size={18} color={theme.colors.textLight} />
+          {/* Hero copy on gradient */}
+          <View style={styles.hero}>
+            <Text style={styles.heroEmoji}>{meta.emoji}</Text>
+            <Text style={styles.heroTitle}>{meta.title}</Text>
+            <Text style={styles.heroSub}>{meta.sub}</Text>
+          </View>
+
+          {/* White sheet — Tinder card */}
+          <Animated.View
+            style={[
+              styles.sheet,
+              { opacity: fadeAnim, transform: [{ translateY: slideAnim }] },
+            ]}
+          >
+            <ScrollView
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={styles.sheetScroll}
+              keyboardShouldPersistTaps="handled"
+            >
+              {step === 0 && (
+                <View style={styles.stepBody}>
+                  <Pressable onPress={pickFromGallery} style={styles.photoCard}>
+                    {currentPhoto ? (
+                      <>
+                        <Image source={{ uri: currentPhoto }} style={styles.photoImg} resizeMode="cover" />
+                        <LinearGradient
+                          colors={['transparent', 'rgba(0,0,0,0.55)']}
+                          style={styles.photoOverlay}
+                        />
+                        <View style={styles.changePhotoBadge}>
+                          <Ionicons name="camera" size={16} color="white" />
+                          <Text style={styles.changePhotoText}>Change photo</Text>
+                        </View>
+                      </>
+                    ) : (
+                      <View style={styles.photoEmpty}>
+                        <View style={styles.photoIconCircle}>
+                          <Ionicons name="add" size={36} color="#C4785A" />
+                        </View>
+                        <Text style={styles.photoEmptyTitle}>Add photo</Text>
+                        <Text style={styles.photoEmptySub}>Tap to upload from gallery</Text>
+                      </View>
+                    )}
+                  </Pressable>
+
+                  <View style={styles.sourceRow}>
+                    <Pressable
+                      style={[styles.sourcePill, photoMode === 'gallery' && styles.sourcePillActive]}
+                      onPress={pickFromGallery}
+                    >
+                      <Ionicons name="images-outline" size={18} color={photoMode === 'gallery' ? '#C4785A' : '#7A6055'} />
+                      <Text style={[styles.sourceText, photoMode === 'gallery' && styles.sourceTextActive]}>Gallery</Text>
+                    </Pressable>
+
+                    {user?.photoURL ? (
+                      <Pressable
+                        style={[styles.sourcePill, photoMode === 'google' && styles.sourcePillActive]}
+                        onPress={() => { setImageUri(user.photoURL); setPhotoMode('google'); }}
+                      >
+                        <Ionicons name="logo-google" size={18} color={photoMode === 'google' ? '#C4785A' : '#7A6055'} />
+                        <Text style={[styles.sourceText, photoMode === 'google' && styles.sourceTextActive]}>Google</Text>
+                      </Pressable>
+                    ) : null}
+
+                    <Pressable
+                      style={[styles.sourcePill, photoMode === 'url' && styles.sourcePillActive]}
+                      onPress={() => setPhotoMode('url')}
+                    >
+                      <Ionicons name="link-outline" size={18} color={photoMode === 'url' ? '#C4785A' : '#7A6055'} />
+                      <Text style={[styles.sourceText, photoMode === 'url' && styles.sourceTextActive]}>URL</Text>
+                    </Pressable>
+                  </View>
+
+                  {photoMode === 'url' && (
+                    <View style={styles.field}>
+                      <Ionicons name="link-outline" size={18} color="#B8A49A" />
+                      <TextInput
+                        style={styles.input}
+                        placeholder="Paste image URL"
+                        placeholderTextColor="#B8A49A"
+                        value={imageUrl}
+                        onChangeText={setImageUrl}
+                        onEndEditing={() => { if (imageUrl) setImageUri(imageUrl); }}
+                        autoCapitalize="none"
+                        keyboardType="url"
+                      />
+                    </View>
+                  )}
+
+                  <View style={styles.tipBox}>
+                    <Ionicons name="bulb-outline" size={18} color="#C4785A" />
+                    <Text style={styles.tipText}>Stand straight, good lighting, full body visible — like a dating profile pic.</Text>
+                  </View>
+                </View>
+              )}
+
+              {step === 1 && (
+                <View style={styles.stepBody}>
+                  <View style={styles.field}>
+                    <Ionicons name="person-outline" size={18} color="#B8A49A" />
                     <TextInput
-                      style={styles.inputField}
+                      style={styles.input}
                       placeholder="Your name"
-                      placeholderTextColor={theme.colors.textLight}
+                      placeholderTextColor="#B8A49A"
                       value={name}
                       onChangeText={setName}
+                      autoCapitalize="words"
                     />
                   </View>
-                </View>
 
-                <View style={styles.inputGroup}>
-                  <Text style={styles.inputLabel}>Email</Text>
-                  <View style={[styles.inputContainer, styles.inputDisabled]}>
-                    <Icon name="mail" size={18} color={theme.colors.textLight} />
+                  <View style={[styles.field, styles.fieldDisabled]}>
+                    <Ionicons name="mail-outline" size={18} color="#B8A49A" />
                     <TextInput
-                      style={styles.inputField}
+                      style={styles.input}
                       value={user?.email || ''}
                       editable={false}
-                      placeholderTextColor={theme.colors.textLight}
+                      placeholderTextColor="#B8A49A"
                     />
                   </View>
-                </View>
 
-                <View style={styles.inputGroup}>
-                  <Text style={styles.inputLabel}>Phone Number</Text>
-                  <View style={styles.inputContainer}>
-                    <Icon name="call" size={18} color={theme.colors.textLight} />
+                  <View style={styles.field}>
+                    <Ionicons name="call-outline" size={18} color="#B8A49A" />
                     <TextInput
-                      style={styles.inputField}
-                      placeholder="+1 234 567 8900"
-                      placeholderTextColor={theme.colors.textLight}
+                      style={styles.input}
+                      placeholder="Phone (optional)"
+                      placeholderTextColor="#B8A49A"
                       value={phone}
                       onChangeText={setPhone}
                       keyboardType="phone-pad"
                     />
                   </View>
-                </View>
 
-                <View style={styles.inputGroup}>
-                  <Text style={styles.inputLabel}>Gender</Text>
-                  <View style={styles.genderRow}>
+                  <Text style={styles.sectionLabel}>I shop for</Text>
+                  <View style={styles.genderGrid}>
                     {GENDERS.map((g) => (
-                      <TouchableOpacity
+                      <Pressable
                         key={g}
-                        style={[styles.genderChip, gender === g && styles.genderChipActive]}
+                        style={[styles.genderPill, gender === g && styles.genderPillActive]}
                         onPress={() => setGender(g)}
                       >
-                        <Text style={[styles.genderChipText, gender === g && styles.genderChipTextActive]}>{g}</Text>
-                      </TouchableOpacity>
+                        <Text style={[styles.genderText, gender === g && styles.genderTextActive]}>{g}</Text>
+                      </Pressable>
                     ))}
                   </View>
                 </View>
-              </View>
-            )}
+              )}
 
-            {/* STEP 2: Done */}
-            {step === 2 && (
-              <View style={[styles.stepContainer, styles.doneContainer]}>
-                <View style={styles.doneIcon}>
-                  <Icon name="heart" color="white" size={48} />
+              {step === 2 && (
+                <View style={[styles.stepBody, styles.doneBody]}>
+                  <View style={styles.doneRing}>
+                    {currentPhoto ? (
+                      <Image source={{ uri: currentPhoto }} style={styles.donePhoto} resizeMode="cover" />
+                    ) : (
+                      <Ionicons name="heart" size={48} color="#C4785A" />
+                    )}
+                  </View>
+                  <Text style={styles.doneTitle}>Profile locked in</Text>
+                  <Text style={styles.doneSub}>
+                    Start swiping outfits — every right swipe runs AI try-on on you.
+                  </Text>
+                  <View style={styles.perkRow}>
+                    {['✨ Trialix AI', '♥ Wishlist', '🔥 Aura'].map(p => (
+                      <View key={p} style={styles.perkChip}>
+                        <Text style={styles.perkText}>{p}</Text>
+                      </View>
+                    ))}
+                  </View>
                 </View>
-                <Text style={styles.stepTitle}>You're all set!</Text>
-                <Text style={styles.stepSub}>
-                  Your profile is ready. Start exploring outfits virtually — swipe right to try anything on.
-                </Text>
-                {currentPhoto && (
-                  <Image source={{ uri: currentPhoto }} style={styles.donePhoto} />
-                )}
-              </View>
-            )}
-          </ScrollView>
-        </Animated.View>
+              )}
+            </ScrollView>
 
-        {/* Navigation Buttons */}
-        <View style={styles.navButtons}>
-          {step > 0 && (
-            <TouchableOpacity style={styles.backBtn} onPress={() => animateToNextStep(step - 1)}>
-              <Icon name="arrowLeft" size={20} color={theme.colors.textDark} />
-            </TouchableOpacity>
-          )}
-          <TouchableOpacity
-            style={[styles.nextBtn, saving && styles.nextBtnDisabled]}
-            onPress={() => {
-              if (step < STEPS.length - 1) {
-                animateToNextStep(step + 1);
-              } else {
-                saveProfile();
-              }
-            }}
-            disabled={saving}
-          >
-            <Text style={styles.nextBtnText}>{step === STEPS.length - 1 ? (saving ? 'AI Processing...' : 'Start Exploring') : 'Continue'}</Text>
-            {!saving && <Icon name="arrowLeft" size={20} color="white" style={{ transform: [{ rotate: '180deg' }] }} />}
-          </TouchableOpacity>
-        </View>
-      </View>
-    </KeyboardAvoidingView>
+            {/* CTA */}
+            <View style={styles.ctaWrap}>
+              <TouchableOpacity
+                style={[styles.ctaBtn, saving && styles.ctaDisabled]}
+                onPress={goNext}
+                disabled={saving}
+                activeOpacity={0.9}
+              >
+                <LinearGradient
+                  colors={['#C4785A', '#E8A882']}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                  style={styles.ctaGrad}
+                >
+                  {saving ? (
+                    <ActivityIndicator color="white" />
+                  ) : (
+                    <>
+                      <Text style={styles.ctaText}>
+                        {step === STEPS.length - 1 ? 'Start swiping' : 'Continue'}
+                      </Text>
+                      <Ionicons name="arrow-forward" size={20} color="white" />
+                    </>
+                  )}
+                </LinearGradient>
+              </TouchableOpacity>
+            </View>
+          </Animated.View>
+        </KeyboardAvoidingView>
+      </SafeAreaView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: theme.colors.secondary, paddingTop: 60 },
-  progressContainer: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 40, marginBottom: 40 },
-  progressStep: { flexDirection: 'row', alignItems: 'center', flex: 1 },
-  progressDot: {
-    width: 32, height: 32, borderRadius: 16, borderWidth: 2,
-    borderColor: '#EADDCA', justifyContent: 'center', alignItems: 'center', backgroundColor: 'white',
+  root: { flex: 1, backgroundColor: '#C4785A' },
+  flex: { flex: 1 },
+  safe: { flex: 1 },
+  orb: {
+    position: 'absolute',
+    borderRadius: 999,
+    backgroundColor: 'rgba(255,255,255,0.1)',
   },
-  progressDotActive: { borderColor: theme.colors.primary, backgroundColor: theme.colors.primary },
-  progressDotInner: { width: 12, height: 12, borderRadius: 6, backgroundColor: 'white' },
-  progressLine: { flex: 1, height: 2, backgroundColor: '#EADDCA', marginHorizontal: 4 },
-  progressLineActive: { backgroundColor: theme.colors.primary },
-  scrollContent: { paddingHorizontal: 24, paddingBottom: 20 },
-  stepContainer: { gap: 20 },
-  stepTitle: { fontSize: 28, fontWeight: theme.fonts.extraBold, color: theme.colors.primary },
-  stepSub: { fontSize: 15, color: theme.colors.textLight, lineHeight: 22, marginTop: -8 },
-  photoArea: {
-    width: 180, height: 180, borderRadius: 90,
-    overflow: 'hidden', backgroundColor: '#FFFBF0',
-    justifyContent: 'center', alignItems: 'center',
-    borderWidth: 1.5, borderColor: '#EADDCA',
-    alignSelf: 'center', marginVertical: 20,
+  orb1: { width: W * 0.6, height: W * 0.6, top: -W * 0.15, right: -W * 0.1 },
+  orb2: { width: W * 0.45, height: W * 0.45, bottom: '38%', left: -W * 0.15 },
+
+  topBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingTop: 8,
   },
-  photoPreview: { width: '100%', height: '100%' },
-  photoPlaceholder: { alignItems: 'center', gap: 10 },
-  photoPlaceholderText: { fontSize: 17, fontWeight: theme.fonts.semibold, color: theme.colors.textDark },
-  photoPlaceholderSub: { fontSize: 13, color: theme.colors.textLight },
-  photoEditBadge: {
-    position: 'absolute', bottom: 16, right: 16, width: 40, height: 40,
-    borderRadius: 20, backgroundColor: theme.colors.primary,
-    justifyContent: 'center', alignItems: 'center',
+  backCircle: {
+    width: 40, height: 40, borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    alignItems: 'center', justifyContent: 'center',
   },
-  photoOptions: { flexDirection: 'row', gap: 10 },
-  backBtn: {
-    width: 56, height: 56, borderRadius: 18, borderWidth: 1.5, borderColor: '#EADDCA',
-    justifyContent: 'center', alignItems: 'center',
-    backgroundColor: '#FFFBF0',
+  backCirclePlaceholder: { width: 40 },
+  stepCounter: { color: 'rgba(255,255,255,0.9)', fontSize: 13, fontWeight: '800' },
+
+  progressRow: {
+    flexDirection: 'row',
+    gap: 6,
+    paddingHorizontal: 24,
+    marginTop: 16,
   },
-  photoOptionActive: { borderColor: theme.colors.primary, backgroundColor: '#FFFBF0' },
-  photoOptionText: { fontSize: 13, fontWeight: '600', color: theme.colors.textLight },
-  photoOptionTextActive: { color: theme.colors.primary },
+  progressPill: {
+    flex: 1,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: 'rgba(255,255,255,0.25)',
+  },
+  progressPillActive: { backgroundColor: 'white' },
+
+  hero: {
+    paddingHorizontal: 28,
+    paddingTop: 20,
+    paddingBottom: 16,
+  },
+  heroEmoji: { fontSize: 28, marginBottom: 6 },
+  heroTitle: {
+    fontSize: 26,
+    fontWeight: '900',
+    color: 'white',
+    letterSpacing: 0.3,
+  },
+  heroSub: {
+    fontSize: 14,
+    color: 'rgba(255,255,255,0.82)',
+    marginTop: 6,
+    lineHeight: 20,
+    fontWeight: '500',
+  },
+
+  sheet: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    marginTop: 8,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -6 },
+    shadowOpacity: 0.1,
+    shadowRadius: 20,
+    elevation: 12,
+  },
+  sheetScroll: { paddingHorizontal: 24, paddingTop: 20, paddingBottom: 12 },
+  stepBody: { gap: 16 },
+
+  photoCard: {
+    width: PHOTO_W,
+    height: PHOTO_H,
+    alignSelf: 'center',
+    borderRadius: 20,
+    overflow: 'hidden',
+    backgroundColor: '#FAF7F4',
+    borderWidth: 2,
+    borderColor: '#EDE0D4',
+    borderStyle: 'dashed',
+  },
+  photoImg: { width: '100%', height: '100%' },
+  photoOverlay: { ...StyleSheet.absoluteFillObject },
+  changePhotoBadge: {
+    position: 'absolute',
+    bottom: 14,
+    alignSelf: 'center',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+  },
+  changePhotoText: { color: 'white', fontSize: 13, fontWeight: '700' },
+  photoEmpty: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    padding: 24,
+  },
+  photoIconCircle: {
+    width: 72, height: 72, borderRadius: 36,
+    backgroundColor: '#FDF2EC',
+    alignItems: 'center', justifyContent: 'center',
+    borderWidth: 2, borderColor: '#C4785A',
+  },
+  photoEmptyTitle: { fontSize: 18, fontWeight: '800', color: '#2A1F1A' },
+  photoEmptySub: { fontSize: 13, color: '#7A6055', textAlign: 'center' },
+
+  sourceRow: { flexDirection: 'row', gap: 8, justifyContent: 'center' },
+  sourcePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 20,
+    backgroundColor: '#FAF7F4',
+    borderWidth: 1.5,
+    borderColor: '#EDE0D4',
+  },
+  sourcePillActive: { borderColor: '#C4785A', backgroundColor: '#FDF2EC' },
+  sourceText: { fontSize: 13, fontWeight: '700', color: '#7A6055' },
+  sourceTextActive: { color: '#C4785A' },
+
+  field: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: '#FAF7F4',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#EDE0D4',
+    paddingHorizontal: 14,
+    paddingVertical: 4,
+  },
+  fieldDisabled: { opacity: 0.65 },
   input: {
-    borderWidth: 1.5, borderColor: theme.colors.gray, borderRadius: 14,
-    paddingHorizontal: 16, paddingVertical: 12, fontSize: 15, color: theme.colors.textDark,
+    flex: 1,
+    fontSize: 16,
+    color: '#2A1F1A',
+    paddingVertical: 12,
+    fontWeight: '500',
   },
-  inputGroup: { gap: 8 },
-  inputLabel: { fontSize: 13, fontWeight: theme.fonts.bold, color: theme.colors.textDark, letterSpacing: 0.5 },
-  inputContainer: {
-    flexDirection: 'row', alignItems: 'center', gap: 12,
-    borderWidth: 1, borderColor: '#EADDCA', borderRadius: 16,
-    paddingHorizontal: 16, paddingVertical: 14, backgroundColor: '#FFFBF0',
+
+  tipBox: {
+    flexDirection: 'row',
+    gap: 10,
+    backgroundColor: '#FDF6EC',
+    borderRadius: 14,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: '#EDD5B0',
   },
-  inputDisabled: { backgroundColor: '#F5F5F5', opacity: 0.6 },
-  inputField: { flex: 1, fontSize: 15, color: theme.colors.textDark },
-  genderRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
-  genderChip: { paddingHorizontal: 18, paddingVertical: 10, borderRadius: 20, borderWidth: 1.5, borderColor: theme.colors.gray },
-  genderChipActive: { borderColor: theme.colors.primary, backgroundColor: '#FFFBF0' },
-  genderChipText: { fontSize: 14, color: theme.colors.textLight, fontWeight: theme.fonts.medium },
-  genderChipTextActive: { color: theme.colors.primary, fontWeight: theme.fonts.bold },
-  doneContainer: { alignItems: 'center', paddingTop: 20 },
-  doneIcon: {
-    width: 100, height: 100, borderRadius: 50, backgroundColor: theme.colors.primary,
-    justifyContent: 'center', alignItems: 'center', marginBottom: 10,
-    shadowColor: theme.colors.primary, shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.35, shadowRadius: 16, elevation: 10,
+  tipText: { flex: 1, fontSize: 12, color: '#7A6055', lineHeight: 18, fontWeight: '500' },
+
+  sectionLabel: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#B8A49A',
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+    marginTop: 4,
   },
-  donePhoto: { width: 180, height: 220, borderRadius: 24, marginTop: 10 },
-  navButtons: { flexDirection: 'row', gap: 12, paddingHorizontal: 24, paddingBottom: 40, paddingTop: 16 },
-  backBtn: {
-    width: 56, height: 56, borderRadius: 18, borderWidth: 1.5, borderColor: theme.colors.gray,
-    justifyContent: 'center', alignItems: 'center',
+  genderGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  genderPill: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 22,
+    borderWidth: 1.5,
+    borderColor: '#EDE0D4',
+    backgroundColor: '#FAF7F4',
   },
-  nextBtn: {
-    flex: 1, height: 56, backgroundColor: theme.colors.primary, borderRadius: 18,
-    justifyContent: 'center', alignItems: 'center', flexDirection: 'row', gap: 8,
-    shadowColor: theme.colors.primary, shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.3, shadowRadius: 12, elevation: 6,
+  genderPillActive: { borderColor: '#C4785A', backgroundColor: '#FDF2EC' },
+  genderText: { fontSize: 14, fontWeight: '600', color: '#7A6055' },
+  genderTextActive: { color: '#C4785A', fontWeight: '800' },
+
+  doneBody: { alignItems: 'center', paddingVertical: 12 },
+  doneRing: {
+    width: 140,
+    height: 140,
+    borderRadius: 70,
+    overflow: 'hidden',
+    borderWidth: 4,
+    borderColor: '#C4785A',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FDF2EC',
   },
-  nextBtnDisabled: { opacity: 0.6 },
-  nextBtnText: { color: 'white', fontSize: 16, fontWeight: theme.fonts.bold },
+  donePhoto: { width: '100%', height: '100%' },
+  doneTitle: { fontSize: 22, fontWeight: '900', color: '#2A1F1A', marginTop: 16 },
+  doneSub: {
+    fontSize: 14,
+    color: '#7A6055',
+    textAlign: 'center',
+    lineHeight: 20,
+    marginTop: 8,
+    paddingHorizontal: 12,
+  },
+  perkRow: { flexDirection: 'row', gap: 8, marginTop: 16, flexWrap: 'wrap', justifyContent: 'center' },
+  perkChip: {
+    backgroundColor: '#FDF2EC',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#EDD5B0',
+  },
+  perkText: { fontSize: 12, fontWeight: '700', color: '#C4785A' },
+
+  ctaWrap: {
+    paddingHorizontal: 24,
+    paddingBottom: 24,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: '#F5EDE4',
+  },
+  ctaBtn: { borderRadius: 28, overflow: 'hidden' },
+  ctaGrad: {
+    height: 54,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  ctaText: { color: 'white', fontSize: 17, fontWeight: '900' },
+  ctaDisabled: { opacity: 0.65 },
 });

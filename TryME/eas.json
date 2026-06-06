@@ -8,12 +8,37 @@
       "distribution": "internal"
     },
     "preview": {
+      "channel": "production",
       "distribution": "internal",
       "android": {
         "buildType": "apk"
+      },
+      "env": {
+        "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "574679078276-rs497nr23vodbhmuni7s90rd0ul9sphl.apps.googleusercontent.com",
+        "EXPO_PUBLIC_FIREBASE_API_KEY": "AIzaSyB9EuogsWeMNyBRFAQi_6rIa4D1rL_Z56Y",
+        "EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN": "aura-ai-powered-fashion-aura.firebaseapp.com",
+        "EXPO_PUBLIC_FIREBASE_PROJECT_ID": "aura-ai-powered-fashion-aura",
+        "EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET": "aura-ai-powered-fashion-aura.firebasestorage.app",
+        "EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID": "574679078276",
+        "EXPO_PUBLIC_FIREBASE_APP_ID": "1:574679078276:android:c50439741ecf0df580f9d1",
+        "EXPO_PUBLIC_VERTEX_PROJECT_ID": "aura-ai-powered-fashion-aura",
+        "EXPO_PUBLIC_VERTEX_REGION": "us-central1"
       }
     },
-    "production": {}
+    "production": {
+      "channel": "production",
+      "env": {
+        "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "574679078276-rs497nr23vodbhmuni7s90rd0ul9sphl.apps.googleusercontent.com",
+        "EXPO_PUBLIC_FIREBASE_API_KEY": "AIzaSyB9EuogsWeMNyBRFAQi_6rIa4D1rL_Z56Y",
+        "EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN": "aura-ai-powered-fashion-aura.firebaseapp.com",
+        "EXPO_PUBLIC_FIREBASE_PROJECT_ID": "aura-ai-powered-fashion-aura",
+        "EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET": "aura-ai-powered-fashion-aura.firebasestorage.app",
+        "EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID": "574679078276",
+        "EXPO_PUBLIC_FIREBASE_APP_ID": "1:574679078276:android:c50439741ecf0df580f9d1",
+        "EXPO_PUBLIC_VERTEX_PROJECT_ID": "aura-ai-powered-fashion-aura",
+        "EXPO_PUBLIC_VERTEX_REGION": "us-central1"
+      }
+    }
   },
   "submit": {
     "production": {}

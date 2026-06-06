@@ -1,0 +1,183 @@
+diff --git a/node_modules/expo-dev-launcher/android/.gradle/8.9/checksums/checksums.lock b/node_modules/expo-dev-launcher/android/.gradle/8.9/checksums/checksums.lock
+new file mode 100644
+index 0000000..71bcf18
+Binary files /dev/null and b/node_modules/expo-dev-launcher/android/.gradle/8.9/checksums/checksums.lock differ
+diff --git a/node_modules/expo-dev-launcher/android/.gradle/8.9/dependencies-accessors/gc.properties b/node_modules/expo-dev-launcher/android/.gradle/8.9/dependencies-accessors/gc.properties
+new file mode 100644
+index 0000000..e69de29
+diff --git a/node_modules/expo-dev-launcher/android/.gradle/8.9/fileChanges/last-build.bin b/node_modules/expo-dev-launcher/android/.gradle/8.9/fileChanges/last-build.bin
+new file mode 100644
+index 0000000..f76dd23
+Binary files /dev/null and b/node_modules/expo-dev-launcher/android/.gradle/8.9/fileChanges/last-build.bin differ
+diff --git a/node_modules/expo-dev-launcher/android/.gradle/8.9/fileHashes/fileHashes.lock b/node_modules/expo-dev-launcher/android/.gradle/8.9/fileHashes/fileHashes.lock
+new file mode 100644
+index 0000000..2dff0de
+Binary files /dev/null and b/node_modules/expo-dev-launcher/android/.gradle/8.9/fileHashes/fileHashes.lock differ
+diff --git a/node_modules/expo-dev-launcher/android/.gradle/8.9/gc.properties b/node_modules/expo-dev-launcher/android/.gradle/8.9/gc.properties
+new file mode 100644
+index 0000000..e69de29
+diff --git a/node_modules/expo-dev-launcher/android/.gradle/buildOutputCleanup/buildOutputCleanup.lock b/node_modules/expo-dev-launcher/android/.gradle/buildOutputCleanup/buildOutputCleanup.lock
+new file mode 100644
+index 0000000..0e80777
+Binary files /dev/null and b/node_modules/expo-dev-launcher/android/.gradle/buildOutputCleanup/buildOutputCleanup.lock differ
+diff --git a/node_modules/expo-dev-launcher/android/.gradle/buildOutputCleanup/cache.properties b/node_modules/expo-dev-launcher/android/.gradle/buildOutputCleanup/cache.properties
+new file mode 100644
+index 0000000..ed25f87
+--- /dev/null
++++ b/node_modules/expo-dev-launcher/android/.gradle/buildOutputCleanup/cache.properties
+@@ -0,0 +1,2 @@
++#Sun May 17 15:34:43 IST 2026
++gradle.version=8.9
+diff --git a/node_modules/expo-dev-launcher/android/.gradle/vcs-1/gc.properties b/node_modules/expo-dev-launcher/android/.gradle/vcs-1/gc.properties
+new file mode 100644
+index 0000000..e69de29
+diff --git a/node_modules/expo-dev-launcher/android/.project b/node_modules/expo-dev-launcher/android/.project
+new file mode 100644
+index 0000000..b5dd54d
+--- /dev/null
++++ b/node_modules/expo-dev-launcher/android/.project
+@@ -0,0 +1,28 @@
++<?xml version="1.0" encoding="UTF-8"?>
++<projectDescription>
++	<name>expo-dev-launcher</name>
++	<comment>Project expo-dev-launcher created by Buildship.</comment>
++	<projects>
++	</projects>
++	<buildSpec>
++		<buildCommand>
++			<name>org.eclipse.buildship.core.gradleprojectbuilder</name>
++			<arguments>
++			</arguments>
++		</buildCommand>
++	</buildSpec>
++	<natures>
++		<nature>org.eclipse.buildship.core.gradleprojectnature</nature>
++	</natures>
++	<filteredResources>
++		<filter>
++			<id>1775297029672</id>
++			<name></name>
++			<type>30</type>
++			<matcher>
++				<id>org.eclipse.core.resources.regexFilterMatcher</id>
++				<arguments>node_modules|\.git|__CREATED_BY_JAVA_LANGUAGE_SERVER__</arguments>
++			</matcher>
++		</filter>
++	</filteredResources>
++</projectDescription>
+diff --git a/node_modules/expo-dev-launcher/android/src/debug/java/expo/modules/devlauncher/DevLauncherPackageDelegate.kt b/node_modules/expo-dev-launcher/android/src/debug/java/expo/modules/devlauncher/DevLauncherPackageDelegate.kt
+index 3b1f007..b742585 100644
+--- a/node_modules/expo-dev-launcher/android/src/debug/java/expo/modules/devlauncher/DevLauncherPackageDelegate.kt
++++ b/node_modules/expo-dev-launcher/android/src/debug/java/expo/modules/devlauncher/DevLauncherPackageDelegate.kt
+@@ -29,7 +29,9 @@ object DevLauncherPackageDelegate {
+       object : ApplicationLifecycleListener {
+         override fun onCreate(application: Application?) {
+           check(application is ReactApplication)
+-          DevLauncherController.initialize(application)
++          if (!DevLauncherController.wasInitialized()) {
++            DevLauncherController.initialize(application)
++          }
+         }
+       }
+     )
+diff --git a/node_modules/expo-dev-launcher/expo-dev-launcher-gradle-plugin/.gradle/8.9/checksums/checksums.lock b/node_modules/expo-dev-launcher/expo-dev-launcher-gradle-plugin/.gradle/8.9/checksums/checksums.lock
+new file mode 100644
+index 0000000..9c335ea
+Binary files /dev/null and b/node_modules/expo-dev-launcher/expo-dev-launcher-gradle-plugin/.gradle/8.9/checksums/checksums.lock differ
+diff --git a/node_modules/expo-dev-launcher/expo-dev-launcher-gradle-plugin/.gradle/8.9/dependencies-accessors/gc.properties b/node_modules/expo-dev-launcher/expo-dev-launcher-gradle-plugin/.gradle/8.9/dependencies-accessors/gc.properties
+new file mode 100644
+index 0000000..e69de29
+diff --git a/node_modules/expo-dev-launcher/expo-dev-launcher-gradle-plugin/.gradle/8.9/executionHistory/executionHistory.bin b/node_modules/expo-dev-launcher/expo-dev-launcher-gradle-plugin/.gradle/8.9/executionHistory/executionHistory.bin
+new file mode 100644
+index 0000000..74680a8
+Binary files /dev/null and b/node_modules/expo-dev-launcher/expo-dev-launcher-gradle-plugin/.gradle/8.9/executionHistory/executionHistory.bin differ
+diff --git a/node_modules/expo-dev-launcher/expo-dev-launcher-gradle-plugin/.gradle/8.9/executionHistory/executionHistory.lock b/node_modules/expo-dev-launcher/expo-dev-launcher-gradle-plugin/.gradle/8.9/executionHistory/executionHistory.lock
+new file mode 100644
+index 0000000..8261e83
+Binary files /dev/null and b/node_modules/expo-dev-launcher/expo-dev-launcher-gradle-plugin/.gradle/8.9/executionHistory/executionHistory.lock differ
+diff --git a/node_modules/expo-dev-launcher/expo-dev-launcher-gradle-plugin/.gradle/8.9/fileChanges/last-build.bin b/node_modules/expo-dev-launcher/expo-dev-launcher-gradle-plugin/.gradle/8.9/fileChanges/last-build.bin
+new file mode 100644
+index 0000000..f76dd23
+Binary files /dev/null and b/node_modules/expo-dev-launcher/expo-dev-launcher-gradle-plugin/.gradle/8.9/fileChanges/last-build.bin differ
+diff --git a/node_modules/expo-dev-launcher/expo-dev-launcher-gradle-plugin/.gradle/8.9/fileHashes/fileHashes.bin b/node_modules/expo-dev-launcher/expo-dev-launcher-gradle-plugin/.gradle/8.9/fileHashes/fileHashes.bin
+new file mode 100644
+index 0000000..94d1ef5
+Binary files /dev/null and b/node_modules/expo-dev-launcher/expo-dev-launcher-gradle-plugin/.gradle/8.9/fileHashes/fileHashes.bin differ
+diff --git a/node_modules/expo-dev-launcher/expo-dev-launcher-gradle-plugin/.gradle/8.9/fileHashes/fileHashes.lock b/node_modules/expo-dev-launcher/expo-dev-launcher-gradle-plugin/.gradle/8.9/fileHashes/fileHashes.lock
+new file mode 100644
+index 0000000..2032b11
+Binary files /dev/null and b/node_modules/expo-dev-launcher/expo-dev-launcher-gradle-plugin/.gradle/8.9/fileHashes/fileHashes.lock differ
+diff --git a/node_modules/expo-dev-launcher/expo-dev-launcher-gradle-plugin/.gradle/8.9/fileHashes/resourceHashesCache.bin b/node_modules/expo-dev-launcher/expo-dev-launcher-gradle-plugin/.gradle/8.9/fileHashes/resourceHashesCache.bin
+new file mode 100644
+index 0000000..b592a98
+Binary files /dev/null and b/node_modules/expo-dev-launcher/expo-dev-launcher-gradle-plugin/.gradle/8.9/fileHashes/resourceHashesCache.bin differ
+diff --git a/node_modules/expo-dev-launcher/expo-dev-launcher-gradle-plugin/.gradle/8.9/gc.properties b/node_modules/expo-dev-launcher/expo-dev-launcher-gradle-plugin/.gradle/8.9/gc.properties
+new file mode 100644
+index 0000000..e69de29
+diff --git a/node_modules/expo-dev-launcher/expo-dev-launcher-gradle-plugin/.gradle/buildOutputCleanup/buildOutputCleanup.lock b/node_modules/expo-dev-launcher/expo-dev-launcher-gradle-plugin/.gradle/buildOutputCleanup/buildOutputCleanup.lock
+new file mode 100644
+index 0000000..34bc177
+Binary files /dev/null and b/node_modules/expo-dev-launcher/expo-dev-launcher-gradle-plugin/.gradle/buildOutputCleanup/buildOutputCleanup.lock differ
+diff --git a/node_modules/expo-dev-launcher/expo-dev-launcher-gradle-plugin/.gradle/buildOutputCleanup/cache.properties b/node_modules/expo-dev-launcher/expo-dev-launcher-gradle-plugin/.gradle/buildOutputCleanup/cache.properties
+new file mode 100644
+index 0000000..9db8b32
+--- /dev/null
++++ b/node_modules/expo-dev-launcher/expo-dev-launcher-gradle-plugin/.gradle/buildOutputCleanup/cache.properties
+@@ -0,0 +1,2 @@
++#Sun May 17 15:34:53 IST 2026
++gradle.version=8.9
+diff --git a/node_modules/expo-dev-launcher/expo-dev-launcher-gradle-plugin/.gradle/buildOutputCleanup/outputFiles.bin b/node_modules/expo-dev-launcher/expo-dev-launcher-gradle-plugin/.gradle/buildOutputCleanup/outputFiles.bin
+new file mode 100644
+index 0000000..a0921bf
+Binary files /dev/null and b/node_modules/expo-dev-launcher/expo-dev-launcher-gradle-plugin/.gradle/buildOutputCleanup/outputFiles.bin differ
+diff --git a/node_modules/expo-dev-launcher/expo-dev-launcher-gradle-plugin/.gradle/vcs-1/gc.properties b/node_modules/expo-dev-launcher/expo-dev-launcher-gradle-plugin/.gradle/vcs-1/gc.properties
+new file mode 100644
+index 0000000..e69de29
+diff --git a/node_modules/expo-dev-launcher/expo-dev-launcher-gradle-plugin/.project b/node_modules/expo-dev-launcher/expo-dev-launcher-gradle-plugin/.project
+new file mode 100644
+index 0000000..09a0a36
+--- /dev/null
++++ b/node_modules/expo-dev-launcher/expo-dev-launcher-gradle-plugin/.project
+@@ -0,0 +1,28 @@
++<?xml version="1.0" encoding="UTF-8"?>
++<projectDescription>
++	<name>expo-dev-launcher-gradle-plugin</name>
++	<comment>Project expo-dev-launcher-gradle-plugin created by Buildship.</comment>
++	<projects>
++	</projects>
++	<buildSpec>
++		<buildCommand>
++			<name>org.eclipse.buildship.core.gradleprojectbuilder</name>
++			<arguments>
++			</arguments>
++		</buildCommand>
++	</buildSpec>
++	<natures>
++		<nature>org.eclipse.buildship.core.gradleprojectnature</nature>
++	</natures>
++	<filteredResources>
++		<filter>
++			<id>1775297029673</id>
++			<name></name>
++			<type>30</type>
++			<matcher>
++				<id>org.eclipse.core.resources.regexFilterMatcher</id>
++				<arguments>node_modules|\.git|__CREATED_BY_JAVA_LANGUAGE_SERVER__</arguments>
++			</matcher>
++		</filter>
++	</filteredResources>
++</projectDescription>
+diff --git a/node_modules/expo-dev-launcher/expo-dev-launcher-gradle-plugin/build/pluginDescriptors/expo-dev-launcher-gradle-plugin.properties b/node_modules/expo-dev-launcher/expo-dev-launcher-gradle-plugin/build/pluginDescriptors/expo-dev-launcher-gradle-plugin.properties
+new file mode 100644
+index 0000000..e677057
+--- /dev/null
++++ b/node_modules/expo-dev-launcher/expo-dev-launcher-gradle-plugin/build/pluginDescriptors/expo-dev-launcher-gradle-plugin.properties
+@@ -0,0 +1 @@
++implementation-class=expo.modules.devlauncher.DevLauncherPlugin
+diff --git a/node_modules/expo-dev-launcher/expo-dev-launcher-gradle-plugin/build/resources/main/META-INF/gradle-plugins/expo-dev-launcher-gradle-plugin.properties b/node_modules/expo-dev-launcher/expo-dev-launcher-gradle-plugin/build/resources/main/META-INF/gradle-plugins/expo-dev-launcher-gradle-plugin.properties
+new file mode 100644
+index 0000000..e677057
+--- /dev/null
++++ b/node_modules/expo-dev-launcher/expo-dev-launcher-gradle-plugin/build/resources/main/META-INF/gradle-plugins/expo-dev-launcher-gradle-plugin.properties
+@@ -0,0 +1 @@
++implementation-class=expo.modules.devlauncher.DevLauncherPlugin

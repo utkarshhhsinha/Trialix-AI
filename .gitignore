@@ -1,0 +1,22 @@
+# node_modules backups
+node_modules.old/
+node_modules/
+
+# macOS
+.DS_Store
+
+# vscode
+.vscode/
+
+# Expo / React Native
+.expo/
+dist/
+web-build/
+
+# logs
+*.log
+*.zip
+
+# env
+.env
+.env*.local

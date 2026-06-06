@@ -42,3 +42,24 @@ app-example
 # generated native folders
 /ios
 /android
+
+# old node_modules backup
+node_modules.old/
+../node_modules.old/
+
+# build artifacts
+*.apk
+*.aab
+
+# logs
+logcat.log
+logcat2.log
+firebase-debug.log
+*.log
+
+# screenshots / recordings
+screen.png
+*.zip
+
+# vscode
+.vscode/node_modules.old/

@@ -1,9 +1,7 @@
 // AI Try-On wrapper — detects which API key is configured and calls the right endpoint.
 // Supported: Fashn.ai REST API (recommended) or Replicate IDM-VTON model.
-
 const FASHN_API_KEY = process.env.EXPO_PUBLIC_FASHN_API_KEY;
 const REPLICATE_API_KEY = process.env.EXPO_PUBLIC_REPLICATE_API_KEY;
-
 /**
  * Run virtual try-on.
  * @param {string} modelImageUrl  - URL or base64 data URI of the user's full-body photo
@@ -11,7 +9,6 @@ const REPLICATE_API_KEY = process.env.EXPO_PUBLIC_REPLICATE_API_KEY;
  * @returns {Promise<string>} - URL of the generated try-on image
  */
 export async function runTryOn(modelImageUrl, garmentImageUrl) {
-  // --- Fashn.ai (recommended) ---
   if (FASHN_API_KEY) {
     const res = await fetch('https://api.fashn.ai/v1/run', {
       method: 'POST',
@@ -74,7 +71,6 @@ export async function runTryOn(modelImageUrl, garmentImageUrl) {
     }
     throw new Error('Replicate timed out');
   }
-
   // --- No API key: simulate with 2s delay ---
   await new Promise(r => setTimeout(r, 2000));
   return garmentImageUrl; // Return clothing image as mock result

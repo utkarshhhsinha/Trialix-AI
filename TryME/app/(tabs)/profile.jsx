@@ -1,21 +1,35 @@
+/**
+ * profile.jsx — TrialX AI
+ * Instagram + Pinterest style profile with cozy warm pastel theme.
+ * Separate wishlist and try-on moodboards, emoji-free clean SVGs.
+ */
+
 import React, { useEffect, useState } from 'react';
 import {
   View, Text, StyleSheet, Image, Pressable, ScrollView,
-  Alert, TextInput, ActivityIndicator, Platform
+  Alert, TextInput, ActivityIndicator, Platform,
+  Dimensions, FlatList, Share,
 } from 'react-native';
+import * as Linking from 'expo-linking';
 import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system/legacy';
+import { LinearGradient } from 'expo-linear-gradient';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
-import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
-import { getDownloadURL, ref, uploadString } from 'firebase/storage';
-import { firebaseAuth, firestore, storage } from '../../lib/firebase';
-import { generateImageEmbedding } from '../../lib/ai_engine';
+import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { firebaseAuth, firestore } from '@/lib/firebase';
 import { theme } from '@/constants/theme';
 import { StatusBar } from 'expo-status-bar';
-import Icon from '../../assets/icons';
+import Icon from '@/assets/icons';
+import { Ionicons } from '@expo/vector-icons';
+import { subscribeUserProfile, subscribeUserCommunityPosts, subscribeUserTryOns, getRankLabel } from '@/lib/community';
+import { downloadTryOnImage, shareTryOnWhatsApp, APP_DOWNLOAD_LINK } from '@/lib/socialActions';
+import * as Haptics from 'expo-haptics';
 
-const GENDERS = ['Male', 'Female', 'Non-binary', 'Prefer not to say'];
+const { width: W } = Dimensions.get('window');
+const GRID_ITEM_W = (W - 48) / 2;
+const GRID_PAGE_SIZE = 6;
 
 export default function Profile() {
   const router = useRouter();
@@ -23,355 +37,750 @@ export default function Profile() {
   const [profile, setProfile] = useState(null);
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
-
-  // Editable fields
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [gender, setGender] = useState('');
   const [imageUri, setImageUri] = useState(null);
+  
+  // Stats & Collections
+  const [communityPosts, setCommunityPosts] = useState([]);
+  const [tryOnItems, setTryOnItems] = useState([]);
+  const [activeSubTab, setActiveSubTab] = useState('tryon'); // 'tryon' | 'community'
+  const [tryOnVisibleCount, setTryOnVisibleCount] = useState(GRID_PAGE_SIZE);
+  const [communityVisibleCount, setCommunityVisibleCount] = useState(GRID_PAGE_SIZE);
+
+  const [auraPoints, setAuraPoints] = useState(0);
+  const [streak, setStreak] = useState(0);
+  const [profileTryOnCount, setProfileTryOnCount] = useState(0);
+  const [profilePostCount, setProfilePostCount] = useState(0);
 
   useEffect(() => {
     if (!firebaseAuth) return;
-    const unsub = onAuthStateChanged(firebaseAuth, async (u) => {
+    const unsubAuth = onAuthStateChanged(firebaseAuth, async u => {
       if (!u) { router.replace('/login'); return; }
       setUser(u);
-      const snap = await getDoc(doc(firestore, 'profiles', u.uid));
-      if (snap.exists()) {
-        const data = snap.data();
-        setProfile(data);
-        setName(data.name || '');
-        setPhone(data.phone || '');
-        setGender(data.gender || '');
-        setImageUri(data.basePhotoUrl || null);
+    });
+    return () => unsubAuth();
+  }, []);
+
+  // Real-time profile + collections
+  useEffect(() => {
+    if (!user || !firestore) return;
+
+    const unsubProfile = subscribeUserProfile(user.uid, (d) => {
+      if (d) {
+        setProfile(d);
+        setName(d.name || '');
+        setPhone(d.phone || '');
+        setGender(d.gender || '');
+        setImageUri(d.basePhotoUrl || null);
+        setAuraPoints(typeof d.auraPoints === 'number' ? d.auraPoints : 0);
+        setStreak(typeof d.streak === 'number' ? d.streak : 0);
+        setProfileTryOnCount(typeof d.tryOnCount === 'number' ? d.tryOnCount : 0);
+        setProfilePostCount(typeof d.postCount === 'number' ? d.postCount : 0);
       }
     });
-    return () => unsub();
-  }, []);
+
+    const unsubCommunity = subscribeUserCommunityPosts(user.uid, (posts) => {
+      setCommunityPosts(posts);
+      setCommunityVisibleCount(GRID_PAGE_SIZE);
+    });
+    const unsubTryOns = subscribeUserTryOns(user.uid, (items) => {
+      setTryOnItems(items);
+      setTryOnVisibleCount(GRID_PAGE_SIZE);
+    });
+
+    return () => {
+      unsubProfile();
+      unsubCommunity();
+      unsubTryOns();
+    };
+  }, [user]);
+
+  const showItemActions = (item, type = 'tryon') => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    Alert.alert(
+      item.garmentDesc || item.caption || 'Your Look',
+      'What would you like to do?',
+      [
+        {
+          text: 'Share on WhatsApp',
+          onPress: async () => {
+            try {
+              await shareTryOnWhatsApp({
+                imageUrl: item.resultImageUrl,
+                title: item.garmentDesc || item.caption,
+                brand: item.brand,
+              });
+            } catch (_) { Alert.alert('Share Failed', 'Could not share.'); }
+          },
+        },
+        {
+          text: 'Download to Gallery',
+          onPress: async () => {
+            try {
+              const { saved } = await downloadTryOnImage(item.resultImageUrl);
+              Alert.alert(saved ? 'Saved!' : 'Shared', saved ? 'Saved to your gallery.' : 'Shared via system sheet.');
+            } catch (_) { Alert.alert('Download Failed', 'Could not save image.'); }
+          },
+        },
+        type === 'tryon' && item.buyLink ? {
+          text: 'Buy Garment',
+          onPress: () => Linking.openURL(item.buyLink).catch(() => { }),
+        } : null,
+        { text: 'Cancel', style: 'cancel' },
+      ].filter(Boolean)
+    );
+  };
 
   const pickPhoto = async () => {
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!perm.granted) return;
-    const res = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'], quality: 0.2, allowsEditing: true, aspect: [1, 1],
-    });
+    const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.2, allowsEditing: true, aspect: [1, 1] });
     if (!res.canceled) setImageUri(res.assets[0].uri);
   };
 
-  const saveProfile = async () => {
-    const currentUser = firebaseAuth?.currentUser;
-    if (!currentUser) {
-      Alert.alert('Authentication required', 'Please wait for your login to complete or try logging in again.');
-      return;
-    }
-    setSaving(true);
+  const pickAndUpdateBasePhoto = async () => {
     try {
-      let photoUrl = profile?.basePhotoUrl;
-      // Upload new photo if changed and it's a local file
-      if (imageUri && imageUri !== profile?.basePhotoUrl && imageUri.startsWith('file://')) {
-        console.log('Initiating native upload for profile update:', imageUri);
-        
-        const token = await firebaseAuth.currentUser.getIdToken();
-        const sdkBucket = storage?.app?.options?.storageBucket;
-        console.log('Firebase SDK reports bucket:', sdkBucket);
-        
-        // Try these bucket names in order
-        const bucketOptions = [
-          sdkBucket,
-          "aura-ai-powered-fashion-aura.firebasestorage.app",
-          "aura-ai-powered-fashion-aura.appspot.com",
-          "aura-ai-powered-fashion-aura"
-        ].filter(Boolean);
-
-        let success = false;
-        for (const bucketName of bucketOptions) {
-          if (success) break;
-          
-          const path = encodeURIComponent(`base-photos/${currentUser.uid}.jpg`);
-          
-          // Endpoint variations
-          const variations = [
-            {
-              url: `https://firebasestorage.googleapis.com/v0/b/${encodeURIComponent(bucketName).replace(/\./g, '%2E')}/o?uploadType=media&name=${path}`,
-              headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'image/jpeg' }
-            },
-            {
-              url: `https://firebasestorage.googleapis.com/v0/b/${encodeURIComponent(bucketName).replace(/\./g, '%2E')}/o?name=${path}`,
-              headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'image/jpeg' }
-            },
-            {
-              url: `https://storage.googleapis.com/upload/storage/v1/b/${encodeURIComponent(bucketName).replace(/\./g, '%2E')}/o?uploadType=media&name=${path}`,
-              headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'image/jpeg' }
-            }
-          ];
-
-          for (const variant of variations) {
-            try {
-              console.log(`Trying native upload: ${variant.url.split('?')[0]} [Bucket: ${bucketName}]`);
-              const uploadRes = await FileSystem.uploadAsync(variant.url, imageUri, {
-                httpMethod: 'POST',
-                uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT,
-                headers: variant.headers,
-              });
-
-              if (uploadRes.status === 200) {
-                photoUrl = `https://firebasestorage.googleapis.com/v0/b/${bucketName}/o/${path}?alt=media`;
-                console.log(`SUCCESS with bucket ${bucketName}!`);
-                success = true;
-                break;
-              } else {
-                console.log(`Failed (${uploadRes.status}): ${uploadRes.body.substring(0, 40)}`);
-              }
-            } catch (err) {
-              console.log(`Error:`, err.message);
-            }
-          }
+      const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!perm.granted) { Alert.alert('Permission needed', 'Allow photo access to choose a model image.'); return; }
+      const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.85, allowsEditing: true, base64: true });
+      if (!res.canceled) {
+        setSaving(true);
+        const uri = res.assets[0].uri;
+        setImageUri(uri);
+        let photoUrl = uri;
+        if (res.assets[0].base64) {
+          photoUrl = `data:image/jpeg;base64,${res.assets[0].base64}`;
+        } else {
+          const rawB64 = await FileSystem.readAsStringAsync(uri, { encoding: 'base64' });
+          photoUrl = `data:image/jpeg;base64,${rawB64}`;
         }
 
-        if (!success) {
-          console.log("Storage upload failed, attempting Firestore Base64 fallback (optimized)...");
-          const base64 = await FileSystem.readAsStringAsync(imageUri, { encoding: FileSystem.EncodingType.Base64 });
-          const base64Length = base64.length;
-          
-          if (base64Length > 1048487) { // 1MB Firestore limit safety margin
-            console.warn(`Photo too large for Firestore (${base64Length} chars). Keeping existing photo.`);
-            photoUrl = profile?.basePhotoUrl || '';
-            success = true;
-          } else {
-            console.log(`Firestore fallback success: ${base64Length} chars.`);
-            photoUrl = `data:image/jpeg;base64,${base64}`;
-            success = true;
-          }
-        }
-      }
+        await setDoc(doc(firestore, 'profiles', user.uid), {
+          basePhotoUrl: photoUrl,
+          updatedAt: serverTimestamp(),
+        }, { merge: true });
 
-      console.log('Generating AI Style Profile (Embeddings)...');
-      let visualEmbedding = profile?.visualEmbedding || [];
-      // Only regenerate if photo changed
-      if (photoUrl !== profile?.basePhotoUrl) {
-        try {
-          visualEmbedding = await generateImageEmbedding(photoUrl);
-        } catch (e) { console.log('AI Error:', e); }
+        setProfile(prev => ({ ...prev, basePhotoUrl: photoUrl }));
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        Alert.alert('Updated ✨', 'Your try-on photo is live — new looks use it instantly.');
       }
-
-      const updated = { 
-        name, 
-        phone, 
-        gender, 
-        basePhotoUrl: photoUrl, 
-        visualEmbedding: visualEmbedding || [],
-        updatedAt: serverTimestamp() 
-      };
-      await setDoc(doc(firestore, 'profiles', user.uid), updated, { merge: true });
-      setProfile(prev => ({ ...prev, ...updated }));
-      setEditing(false);
     } catch (e) {
-      Alert.alert('Save failed', e.message);
+      Alert.alert('Upload Failed', e.message);
     } finally {
       setSaving(false);
     }
   };
 
-  const handleSignOut = () => {
-    Alert.alert('Sign Out', 'Are you sure you want to sign out?', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Sign Out', style: 'destructive', onPress: async () => {
-          await signOut(firebaseAuth);
-          router.replace('/login');
+  const handleShareProfile = async () => {
+    try {
+      const handle = (profile?.name || user?.email?.split('@')[0] || 'stylist').replace(/\s+/g, '');
+      await Share.share({
+        message: `Check out my TrialX AI style profile @${handle}\n${APP_DOWNLOAD_LINK}`,
+        url: APP_DOWNLOAD_LINK,
+      });
+    } catch (_) { /* dismissed */ }
+  };
+
+  const handleStylePreferences = () => {
+    setEditing(true);
+    Haptics.selectionAsync();
+  };
+
+  const saveProfile = async () => {
+    if (!firebaseAuth?.currentUser) { Alert.alert('Not signed in'); return; }
+    setSaving(true);
+    try {
+      let photoUrl = profile?.basePhotoUrl || imageUri;
+      if (imageUri && imageUri !== profile?.basePhotoUrl && (imageUri.startsWith('file://') || imageUri.startsWith('content://'))) {
+        const base64 = await FileSystem.readAsStringAsync(imageUri, { encoding: 'base64' });
+        if (base64.length <= 1048487) {
+          photoUrl = `data:image/jpeg;base64,${base64}`;
         }
-      },
+      }
+      const updated = { name, phone, gender, basePhotoUrl: photoUrl };
+      setProfile(prev => ({ ...prev, ...updated }));
+      setEditing(false);
+      await setDoc(doc(firestore, 'profiles', user.uid), {
+        ...updated,
+        updatedAt: serverTimestamp(),
+      }, { merge: true });
+      Alert.alert('Profile Saved ✨');
+    } catch (e) { Alert.alert('Save failed', e.message); }
+    finally { setSaving(false); }
+  };
+
+  const handleSignOut = () => {
+    Alert.alert('Sign Out', 'Are you sure?', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Sign Out', style: 'destructive', onPress: async () => { await signOut(firebaseAuth); router.replace('/login'); } },
     ]);
   };
 
-  const photoSrc = imageUri ? { uri: imageUri } : null;
+  const rank = getRankLabel(auraPoints);
+  const triesCount = Math.max(tryOnItems.length, profileTryOnCount);
+  const postsCount = Math.max(communityPosts.length, profilePostCount);
+  const visibleTryOns = tryOnItems.slice(0, tryOnVisibleCount);
+  const visibleCommunity = communityPosts.slice(0, communityVisibleCount);
+
+  const renderCommunityItem = ({ item }) => (
+    <Pressable style={styles.gridCard} onLongPress={() => showItemActions(item, 'community')}>
+      <Image source={{ uri: item.resultImageUrl || item.garmentImageUrl }} style={styles.gridImage} resizeMode="cover" />
+      <LinearGradient colors={['transparent', 'rgba(42,31,26,0.8)']} style={styles.gridGrad} />
+      <View style={styles.gridBadge}>
+        <Text style={styles.gridBadgeText}>Post</Text>
+      </View>
+      <View style={styles.gridInfo}>
+        <Text style={styles.gridBrand} numberOfLines={1}>{(item.brand || 'COMMUNITY').toUpperCase()}</Text>
+        <Text style={styles.gridTitle} numberOfLines={1}>{item.caption || item.garmentDesc}</Text>
+      </View>
+    </Pressable>
+  );
+
+  const renderTryOnItem = ({ item }) => (
+    <Pressable
+      style={styles.gridCard}
+      onPress={() => item.buyLink && Linking.openURL(item.buyLink).catch(() => { })}
+      onLongPress={() => showItemActions(item, 'tryon')}
+    >
+      <Image source={{ uri: item.resultImageUrl }} style={styles.gridImage} resizeMode="cover" />
+      <LinearGradient colors={['transparent', 'rgba(42,31,26,0.8)']} style={styles.gridGrad} />
+      <View style={styles.gridBadge}>
+        <Text style={styles.gridBadgeText}>AI Fit</Text>
+      </View>
+      <View style={styles.gridInfo}>
+        <Text style={styles.gridBrand} numberOfLines={1}>{item.brand?.toUpperCase()}</Text>
+        <Text style={styles.gridTitle} numberOfLines={1}>{item.garmentDesc}</Text>
+      </View>
+    </Pressable>
+  );
 
   return (
     <View style={styles.container}>
       <StatusBar style="dark" />
-      <ScrollView showsVerticalScrollIndicator={false}>
-        {/* Header */}
-        <View style={styles.header}>
-          <Text style={styles.headerTitle}>Profile</Text>
-          <Pressable onPress={() => editing ? saveProfile() : setEditing(true)} style={styles.editBtn} disabled={saving}>
-            {saving ? <ActivityIndicator size="small" color={theme.colors.primary} /> : (
-              <Text style={styles.editBtnText}>{editing ? 'Save' : 'Edit'}</Text>
+
+      {/* Decorative Background Orbs */}
+      <View style={[styles.orb, styles.orb1]} />
+      <View style={[styles.orb, styles.orb2]} />
+      
+      {/* ── HEADER NAVIGATION */}
+      <SafeAreaView edges={['top']} style={styles.safeHeader}>
+        <View style={styles.headerTop}>
+          <Text style={styles.headerTitle}>Style ID</Text>
+          <Pressable style={styles.editBtn} onPress={() => editing ? saveProfile() : setEditing(true)} disabled={saving}>
+            {saving ? (
+              <ActivityIndicator size="small" color={theme.colors.primary} />
+            ) : (
+              <>
+                <Ionicons name={editing ? "checkmark" : "create-outline"} size={14} color="#C4785A" />
+                <Text style={styles.editBtnText}>{editing ? 'Save' : 'Edit'}</Text>
+              </>
             )}
           </Pressable>
         </View>
+      </SafeAreaView>
 
-        {/* Avatar */}
-        <View style={styles.avatarSection}>
-          <Pressable onPress={editing ? pickPhoto : null}>
-            <View style={styles.avatarRing}>
-              {photoSrc
-                ? <Image source={photoSrc} style={styles.avatar} />
-                : <Icon name="user" size={48} color={theme.colors.primary} />
-              }
-            </View>
-            {editing && (
-              <View style={styles.avatarEditBadge}>
-                <Icon name="camera" size={16} color="white" />
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+        {/* ── INSTAGRAM PROFILE CARD */}
+        <View style={styles.heroSection}>
+          <View style={styles.profileRow}>
+            {/* Avatar on the Left */}
+            <Pressable style={styles.avatarContainer} onPress={editing ? pickPhoto : null}>
+              <View style={styles.avatarBorder}>
+                {imageUri ? (
+                  <Image source={{ uri: imageUri }} style={styles.avatarImg} />
+                ) : (
+                  <Icon name="user" size={32} color={theme.colors.textSecondary} />
+                )}
               </View>
-            )}
-          </Pressable>
-          <Text style={styles.avatarName}>{profile?.name || 'Your Name'}</Text>
-          <Text style={styles.avatarEmail}>{user?.email}</Text>
-        </View>
+              {editing && (
+                <View style={styles.avatarEditOverlay}>
+                  <Ionicons name="camera" size={12} color="white" />
+                </View>
+              )}
+            </Pressable>
 
-        {/* Info section */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Personal Info</Text>
-
-          <InfoRow
-            label="Name" icon="user" value={name} editing={editing}
-            onChangeText={setName} placeholder="Your name"
-          />
-          <InfoRow
-            label="Phone" icon="call" value={phone} editing={editing}
-            onChangeText={setPhone} placeholder="+1 234 567 8900"
-            keyboardType="phone-pad"
-          />
-          <View style={styles.infoRow}>
-            <Icon name="location" size={18} color={theme.colors.textLight} />
-            <View style={styles.infoContent}>
-              <Text style={styles.infoLabel}>Email</Text>
-              <Text style={styles.infoValue}>{user?.email}</Text>
+            {/* Horizontal Stats columns on Right */}
+            <View style={styles.statsCard}>
+              <View style={styles.statCol}>
+                <Text style={styles.statValue}>{triesCount}</Text>
+                <Text style={styles.statLabel}>Tries</Text>
+              </View>
+              <View style={styles.statDivider} />
+              <View style={styles.statCol}>
+                <Text style={styles.statValue}>{postsCount}</Text>
+                <Text style={styles.statLabel}>Posts</Text>
+              </View>
+              <View style={styles.statDivider} />
+              <View style={styles.statCol}>
+                <Text style={styles.statValue}>🔥 {streak}</Text>
+                <Text style={styles.statLabel}>Streak</Text>
+              </View>
+              <View style={styles.statDivider} />
+              <View style={styles.statCol}>
+                <Text style={styles.statValue}>{auraPoints}</Text>
+                <Text style={styles.statLabel}>Aura</Text>
+              </View>
             </View>
+          </View>
+
+          {/* Biography and tags */}
+          <View style={styles.bioContainer}>
+            <Text style={styles.profileName}>{profile?.name || 'Create ID Name'}</Text>
+            <Text style={styles.profileEmail}>{user?.email}</Text>
+            
+            {/* Rank Badge - Premium gradient styling */}
+            <LinearGradient
+              colors={['#C4785A', '#E8A882']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+              style={styles.rankBadge}
+            >
+              <Icon name="sparkles" size={10} color="white" />
+              <Text style={styles.rankText}>{rank}</Text>
+            </LinearGradient>
+
+            {/* Aesthetic statement */}
+            <Text style={styles.bioText}>
+              Vibe matcher mapping confidence. {postsCount} community posts · {triesCount} try-ons · {auraPoints} aura.
+            </Text>
           </View>
         </View>
 
+        {/* ── TOKENS */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Style Wallet</Text>
+          <View style={styles.tokenRow}>
+            {[
+              { iconName: 'sparkles', label: 'Aura Points', value: auraPoints, color: '#C4785A', bg: '#FDF2EC', gradient: ['#FFFFFF', '#FDF2EC'] },
+              { iconName: 'location', label: 'Drip Coins', value: 125, color: '#C49A6C', bg: '#FDF6EC', gradient: ['#FFFFFF', '#FDF6EC'] },
+              { iconName: 'heart', label: 'Style Creds', value: 48, color: '#6B9E7A', bg: '#EDF7EF', gradient: ['#FFFFFF', '#EDF7EF'] },
+            ].map(t => (
+              <View key={t.label} style={styles.tokenCard}>
+                <LinearGradient
+                  colors={t.gradient}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 0, y: 1 }}
+                  style={styles.tokenGradientContainer}
+                >
+                  {/* Top thin accent bar */}
+                  <View style={[styles.tokenAccentBar, { backgroundColor: t.color }]} />
+                  
+                  <View style={styles.tokenCardContent}>
+                    <View style={[styles.tokenIconCircle, { backgroundColor: t.bg }]}>
+                      <Icon name={t.iconName} size={14} color={t.color} />
+                    </View>
+                    <Text style={styles.tokenValue}>{t.value}</Text>
+                    <Text style={styles.tokenLabel}>{t.label.toUpperCase()}</Text>
+                  </View>
+                </LinearGradient>
+              </View>
+            ))}
+          </View>
+        </View>
+
+        {/* ── PERSONAL INFO FIELD (edit mode only) */}
         {editing && (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Gender</Text>
-            <View style={styles.genderRow}>
-              {GENDERS.map((g) => (
-                <Pressable
-                  key={g}
-                  style={[styles.genderChip, gender === g && styles.genderChipActive]}
-                  onPress={() => setGender(g)}
-                >
-                  <Text style={[styles.genderChipText, gender === g && styles.genderChipTextActive]}>{g}</Text>
-                </Pressable>
-              ))}
+            <Text style={styles.sectionTitle}>Style Account Details</Text>
+            <View style={styles.infoForm}>
+              <View style={styles.inputField}>
+                <Text style={styles.inputLabel}>Name</Text>
+                <TextInput style={styles.textInput} value={name} onChangeText={setName} placeholder="Your display name" />
+              </View>
+              <View style={styles.inputField}>
+                <Text style={styles.inputLabel}>Phone</Text>
+                <TextInput style={styles.textInput} value={phone} onChangeText={setPhone} placeholder="Phone number" keyboardType="phone-pad" />
+              </View>
+              <View style={styles.inputField}>
+                <Text style={styles.inputLabel}>Gender</Text>
+                <View style={styles.genderRow}>
+                  {['Male', 'Female'].map((g) => (
+                    <Pressable
+                      key={g}
+                      style={[styles.genderChip, gender === g && styles.genderChipActive]}
+                      onPress={() => setGender(g)}
+                    >
+                      <Text style={[styles.genderChipText, gender === g && styles.genderChipTextActive]}>{g}</Text>
+                    </Pressable>
+                  ))}
+                </View>
+              </View>
             </View>
           </View>
         )}
 
-        {/* Actions */}
-        <View style={styles.actionsSection}>
-          <Pressable style={styles.actionRow} onPress={() => router.push('/(tabs)/wishlist')}>
-            <View style={styles.actionIcon}>
-              <Icon name="heart" size={20} color={theme.colors.primary} />
-            </View>
-            <Text style={styles.actionText}>My Wishlist</Text>
-            <Icon name="arrowLeft" size={18} color={theme.colors.textLight} style={{ transform: [{ rotate: '180deg' }] }} />
+        {/* ── PINTEREST SUB-TABS SELECTOR */}
+        <View style={styles.subTabsContainer}>
+          <Pressable
+            style={[styles.subTabButton, activeSubTab === 'tryon' && styles.subTabActive]}
+            onPress={() => setActiveSubTab('tryon')}
+          >
+            <Icon name="image" size={16} color={activeSubTab === 'tryon' ? '#C4785A' : '#7A6055'} />
+            <Text style={[styles.subTabText, activeSubTab === 'tryon' && styles.subTabActiveText]}>Try-Ons ({triesCount})</Text>
           </Pressable>
-          <Pressable style={styles.actionRow} onPress={() => router.push('/profile-setup')}>
-            <View style={styles.actionIcon}>
-              <Icon name="camera" size={20} color={theme.colors.primary} />
-            </View>
-            <Text style={styles.actionText}>Update Model Photo</Text>
-            <Icon name="arrowLeft" size={18} color={theme.colors.textLight} style={{ transform: [{ rotate: '180deg' }] }} />
-          </Pressable>
-          <Pressable style={[styles.actionRow, styles.signOutRow]} onPress={handleSignOut}>
-            <View style={[styles.actionIcon, styles.signOutIcon]}>
-              <Icon name="logout" size={20} color="#FF3B30" />
-            </View>
-            <Text style={[styles.actionText, styles.signOutText]}>Sign Out</Text>
+          <Pressable
+            style={[styles.subTabButton, activeSubTab === 'community' && styles.subTabActive]}
+            onPress={() => setActiveSubTab('community')}
+          >
+            <Icon name="video" size={16} color={activeSubTab === 'community' ? '#C4785A' : '#7A6055'} />
+            <Text style={[styles.subTabText, activeSubTab === 'community' && styles.subTabActiveText]}>Community ({postsCount})</Text>
           </Pressable>
         </View>
+
+        {/* Grid Lists (Separate subtabs) */}
+        <View style={styles.gridContainer}>
+          {activeSubTab === 'community' ? (
+            <>
+              <FlatList
+                data={visibleCommunity}
+                renderItem={renderCommunityItem}
+                keyExtractor={i => i.id}
+                numColumns={2}
+                scrollEnabled={false}
+                contentContainerStyle={styles.gridList}
+                columnWrapperStyle={styles.gridRow}
+                ListEmptyComponent={() => (
+                  <View style={styles.gridEmpty}>
+                    <Text style={styles.emptyText}>{"You haven't posted to the Community yet."}</Text>
+                  </View>
+                )}
+              />
+              {communityPosts.length > communityVisibleCount && (
+                <Pressable
+                  style={styles.seeMoreBtn}
+                  onPress={() => setCommunityVisibleCount(c => c + GRID_PAGE_SIZE)}
+                >
+                  <Text style={styles.seeMoreText}>
+                    See more ({communityPosts.length - communityVisibleCount} left)
+                  </Text>
+                </Pressable>
+              )}
+            </>
+          ) : (
+            <>
+              <FlatList
+                data={visibleTryOns}
+                renderItem={renderTryOnItem}
+                keyExtractor={i => i.id}
+                numColumns={2}
+                scrollEnabled={false}
+                contentContainerStyle={styles.gridList}
+                columnWrapperStyle={styles.gridRow}
+                ListEmptyComponent={() => (
+                  <View style={styles.gridEmpty}>
+                    <Text style={styles.emptyText}>{"You haven't run any AI Try-Ons yet."}</Text>
+                  </View>
+                )}
+              />
+              {tryOnItems.length > tryOnVisibleCount && (
+                <Pressable
+                  style={styles.seeMoreBtn}
+                  onPress={() => setTryOnVisibleCount(c => c + GRID_PAGE_SIZE)}
+                >
+                  <Text style={styles.seeMoreText}>
+                    See more ({tryOnItems.length - tryOnVisibleCount} left)
+                  </Text>
+                </Pressable>
+              )}
+            </>
+          )}
+        </View>
+
+        {/* ── SETTINGS AND ACCOUNT SYSTEM */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Account Options</Text>
+          <View style={styles.actionsCard}>
+            {[
+              { ionicon: 'camera-outline', label: 'Upload Try-On Photo', onPress: pickAndUpdateBasePhoto },
+              { ionicon: 'sparkles-outline', label: 'Recalibrate AI Twin', onPress: pickAndUpdateBasePhoto },
+              { ionicon: 'options-outline', label: 'Style Preferences', onPress: handleStylePreferences },
+              { ionicon: 'share-social-outline', label: 'Share Profile Link', onPress: handleShareProfile },
+            ].map((a, i) => (
+              <Pressable key={a.label} style={[styles.actionRow, i === 3 && styles.actionRowLast]} onPress={a.onPress}>
+                <View style={styles.actionIconCircle}>
+                  <Ionicons name={a.ionicon} size={16} color="#7A6055" />
+                </View>
+                <Text style={styles.actionText}>{a.label}</Text>
+                <Ionicons name="chevron-forward" size={16} color="#B8A49A" />
+              </Pressable>
+            ))}
+          </View>
+        </View>
+
+        {/* Sign Out */}
+        <Pressable style={styles.signOutBtn} onPress={handleSignOut}>
+          <Ionicons name="log-out-outline" size={16} color="#C4604A" />
+          <Text style={styles.signOutText}>Sign Out Account</Text>
+        </Pressable>
+
+        <View style={{ height: 110 }} />
       </ScrollView>
     </View>
   );
 }
 
-function InfoRow({ label, icon, value, editing, onChangeText, placeholder, keyboardType }) {
-  return (
-    <View style={styles.infoRow}>
-      <Icon name={icon} size={18} color={theme.colors.textLight} />
-      <View style={styles.infoContent}>
-        <Text style={styles.infoLabel}>{label}</Text>
-        {editing ? (
-          <TextInput
-            style={styles.infoInput}
-            value={value}
-            onChangeText={onChangeText}
-            placeholder={placeholder}
-            placeholderTextColor={theme.colors.textLight}
-            keyboardType={keyboardType || 'default'}
-          />
-        ) : (
-          <Text style={styles.infoValue}>{value || '—'}</Text>
-        )}
-      </View>
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: theme.colors.secondary },
-  header: {
+  container: { flex: 1, backgroundColor: '#FAF7F4' },
+  safeHeader: { backgroundColor: 'transparent' },
+  headerTop: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    paddingHorizontal: 24, paddingTop: Platform.OS === 'ios' ? 60 : 40, paddingBottom: 10,
+    paddingHorizontal: 20, height: 56,
   },
-  headerTitle: { fontSize: 28, fontWeight: theme.fonts.extraBold, color: theme.colors.textDark },
+  headerTitle: { fontSize: 22, fontWeight: '900', color: '#2A1F1A', letterSpacing: 0.5 },
   editBtn: {
-    paddingHorizontal: 18, paddingVertical: 8,
-    backgroundColor: theme.colors.primary, borderRadius: 12,
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    paddingHorizontal: 16, paddingVertical: 8,
+    backgroundColor: '#FFFFFF', borderRadius: 20,
+    borderWidth: 1, borderColor: '#EDE0D4',
+    shadowColor: '#2A1F1A',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
   },
-  editBtnText: { color: 'white', fontWeight: theme.fonts.bold, fontSize: 15 },
-  avatarSection: { alignItems: 'center', paddingVertical: 24 },
-  avatarRing: {
-    width: 100, height: 100, borderRadius: 50,
-    backgroundColor: '#FFFBF0', overflow: 'hidden',
-    borderWidth: 3, borderColor: theme.colors.primary,
+  editBtnText: { color: '#C4785A', fontWeight: '800', fontSize: 13, letterSpacing: 0.3 },
+
+  scrollContent: { paddingTop: 16 },
+
+  // Decorative Background Orbs
+  orb: {
+    position: 'absolute',
+    borderRadius: 999,
+  },
+  orb1: {
+    width: W * 0.6, height: W * 0.6,
+    top: -W * 0.15, right: -W * 0.1,
+    backgroundColor: 'rgba(238, 196, 170, 0.18)',
+  },
+  orb2: {
+    width: W * 0.45, height: W * 0.45,
+    bottom: '45%', left: -W * 0.15,
+    backgroundColor: 'rgba(237, 213, 176, 0.15)',
+  },
+
+  // Hero Card
+  heroSection: {
+    paddingHorizontal: 20, paddingBottom: 16,
+  },
+  profileRow: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+  },
+  avatarContainer: { position: 'relative' },
+  avatarBorder: {
+    width: 88, height: 88, borderRadius: 44,
+    borderWidth: 2, borderColor: '#C4785A',
+    padding: 3,
     justifyContent: 'center', alignItems: 'center',
+    backgroundColor: '#FAF7F4',
   },
-  avatar: { width: '100%', height: '100%' },
-  avatarEditBadge: {
-    position: 'absolute', bottom: 0, right: 0, width: 32, height: 32,
-    borderRadius: 16, backgroundColor: theme.colors.primary,
-    justifyContent: 'center', alignItems: 'center',
-    borderWidth: 2, borderColor: 'white',
+  avatarImg: { width: '100%', height: '100%', borderRadius: 40 },
+  avatarEditOverlay: {
+    position: 'absolute', bottom: 0, right: 0,
+    width: 24, height: 24, borderRadius: 12,
+    backgroundColor: '#C4785A', justifyContent: 'center', alignItems: 'center',
+    borderWidth: 1.5, borderColor: '#FAF7F4',
   },
-  avatarName: { fontSize: 22, fontWeight: theme.fonts.extraBold, color: theme.colors.textDark, marginTop: 12 },
-  avatarEmail: { fontSize: 14, color: theme.colors.textLight, marginTop: 4 },
-  section: {
-    marginHorizontal: 20, marginBottom: 16, backgroundColor: 'white',
-    borderRadius: 20, padding: 20,
-    borderWidth: 1, borderColor: '#EADDCA',
-    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.04, shadowRadius: 8, elevation: 2,
+  statsCard: {
+    flexDirection: 'row', flex: 1, justifyContent: 'space-around', alignItems: 'center',
+    marginLeft: 16, backgroundColor: '#FFFFFF', borderRadius: 18,
+    paddingVertical: 12, paddingHorizontal: 8,
+    borderWidth: 1, borderColor: '#EDE0D4',
+    shadowColor: '#2A1F1A',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    elevation: 2,
   },
-  sectionTitle: { fontSize: 13, fontWeight: theme.fonts.bold, color: theme.colors.textLight, letterSpacing: 1, marginBottom: 16 },
-  infoRow: { flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#F5F5F5' },
-  infoContent: { flex: 1 },
-  infoLabel: { fontSize: 11, color: theme.colors.textLight, fontWeight: theme.fonts.semibold, letterSpacing: 0.5 },
-  infoValue: { fontSize: 15, color: theme.colors.textDark, fontWeight: theme.fonts.medium, marginTop: 2 },
-  infoInput: { fontSize: 15, color: theme.colors.textDark, paddingVertical: 0, marginTop: 2, borderBottomWidth: 1, borderBottomColor: theme.colors.primary },
-  genderRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
-  genderChip: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, borderWidth: 1.5, borderColor: theme.colors.gray },
-  genderChipActive: { borderColor: theme.colors.primary, backgroundColor: '#FFFBF0' },
-  genderChipText: { fontSize: 13, color: theme.colors.textLight },
-  genderChipTextActive: { color: theme.colors.primary, fontWeight: theme.fonts.bold },
-  actionsSection: {
-    marginHorizontal: 20, marginBottom: 40, backgroundColor: 'white',
-    borderRadius: 20, overflow: 'hidden',
-    borderWidth: 1, borderColor: '#EADDCA',
-    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.04, shadowRadius: 8, elevation: 2,
+  statDivider: {
+    width: 1, height: 24, backgroundColor: '#F5EDE4',
+  },
+  statCol: { alignItems: 'center' },
+  statValue: { fontSize: 18, fontWeight: '900', color: '#2A1F1A' },
+  statLabel: { fontSize: 11, color: '#7A6055', fontWeight: '700', marginTop: 2 },
+
+  // Bio
+  bioContainer: { marginTop: 14, gap: 5 },
+  profileName: { fontSize: 20, fontWeight: '900', color: '#2A1F1A' },
+  profileEmail: { fontSize: 12, color: '#B8A49A', fontWeight: '600' },
+  rankBadge: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    paddingHorizontal: 10, paddingVertical: 4,
+    borderRadius: 8, alignSelf: 'flex-start',
+    marginTop: 4,
+  },
+  rankText: { fontSize: 10, fontWeight: '800', color: 'white', textTransform: 'uppercase', letterSpacing: 0.5 },
+  bioText: { fontSize: 13, color: '#7A6055', lineHeight: 18, marginTop: 4 },
+
+  // Sections
+  section: { paddingHorizontal: 20, paddingTop: 20 },
+  sectionTitle: { fontSize: 12, fontWeight: '800', color: '#B8A49A', letterSpacing: 1.2, textTransform: 'uppercase', marginBottom: 12 },
+
+  // Wallet Tokens
+  tokenRow: { flexDirection: 'row', gap: 10 },
+  tokenCard: {
+    flex: 1,
+    borderRadius: 16,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#EDE0D4',
+    overflow: 'hidden',
+    shadowColor: '#2A1F1A',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.04,
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  tokenGradientContainer: {
+    flex: 1,
+    width: '100%',
+  },
+  tokenAccentBar: {
+    height: 3,
+    width: '100%',
+  },
+  tokenCardContent: {
+    paddingVertical: 14,
+    paddingHorizontal: 8,
+    alignItems: 'center',
+    gap: 8,
+  },
+  tokenIconCircle: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  tokenValue: {
+    fontSize: 22,
+    fontWeight: '900',
+    color: '#2A1F1A',
+    lineHeight: 26,
+    marginTop: 2,
+  },
+  tokenLabel: {
+    fontSize: 9,
+    color: '#7A6055',
+    fontWeight: '800',
+    letterSpacing: 0.8,
+    textAlign: 'center',
+  },
+
+  // Edit details form
+  infoForm: {
+    backgroundColor: '#FFFFFF', borderRadius: 20, padding: 18, gap: 12,
+    borderWidth: 1, borderColor: '#EDE0D4',
+  },
+  inputField: { gap: 4 },
+  inputLabel: { fontSize: 11, color: '#7A6055', fontWeight: '800', letterSpacing: 0.5 },
+  textInput: {
+    color: '#2A1F1A', fontSize: 14, fontWeight: '600',
+    borderBottomWidth: 1, borderBottomColor: '#EDE0D4',
+    paddingVertical: 4,
+  },
+
+  // Pinterest sub-tabs
+  subTabsContainer: {
+    flexDirection: 'row',
+    backgroundColor: '#F0E6DD',
+    borderRadius: 24,
+    padding: 4,
+    marginHorizontal: 20,
+    marginTop: 24,
+  },
+  subTabButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 10,
+    borderRadius: 20,
+  },
+  subTabActive: {
+    backgroundColor: '#FFFFFF',
+    shadowColor: '#2A1F1A',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  subTabText: { fontSize: 13, color: '#7A6055', fontWeight: '700' },
+  subTabActiveText: { color: '#2A1F1A', fontWeight: '800' },
+
+  // Grid
+  gridContainer: { padding: 16 },
+  gridList: { paddingBottom: 10 },
+  gridRow: { gap: 12, marginBottom: 12 },
+  gridCard: {
+    width: GRID_ITEM_W, height: GRID_ITEM_W * 1.35, borderRadius: 16,
+    overflow: 'hidden', backgroundColor: '#FFFFFF',
+    borderWidth: 1, borderColor: '#EDE0D4',
+    shadowColor: '#2A1F1A',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  gridImage: { ...StyleSheet.absoluteFillObject },
+  gridGrad: { position: 'absolute', bottom: 0, left: 0, right: 0, height: '40%' },
+  gridInfo: { position: 'absolute', bottom: 10, left: 10, right: 10 },
+  gridBrand: { fontSize: 8, fontWeight: '800', color: '#EEC4AA', letterSpacing: 1 },
+  gridTitle: { fontSize: 11, fontWeight: '700', color: 'white' },
+  gridEmpty: { paddingVertical: 44, alignItems: 'center', justifyContent: 'center' },
+  emptyText: { color: '#B8A49A', fontSize: 13, fontWeight: '600' },
+  seeMoreBtn: {
+    marginTop: 8, marginBottom: 4, paddingVertical: 14, borderRadius: 14,
+    backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#EDE0D4', alignItems: 'center',
+  },
+  seeMoreText: { fontSize: 14, fontWeight: '800', color: '#C4785A' },
+  gridBadge: {
+    position: 'absolute', top: 10, right: 10,
+    backgroundColor: 'rgba(42, 31, 26, 0.45)',
+    paddingHorizontal: 8, paddingVertical: 4,
+    borderRadius: 8,
+  },
+  gridBadgeText: { fontSize: 8, fontWeight: '800', color: 'white', letterSpacing: 0.5, textTransform: 'uppercase' },
+
+  // Settings
+  actionsCard: {
+    backgroundColor: '#FFFFFF', borderRadius: 20, overflow: 'hidden',
+    borderWidth: 1, borderColor: '#EDE0D4',
+    shadowColor: '#2A1F1A',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  actionIconCircle: {
+    width: 32, height: 32, borderRadius: 16,
+    backgroundColor: '#F5EDE4', alignItems: 'center', justifyContent: 'center',
   },
   actionRow: {
-    flexDirection: 'row', alignItems: 'center', gap: 14, paddingHorizontal: 20, paddingVertical: 16,
-    borderBottomWidth: 1, borderBottomColor: '#F5F5F5',
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    paddingHorizontal: 16, paddingVertical: 12,
+    borderBottomWidth: 0.5, borderBottomColor: '#F7F0EB',
   },
-  actionIcon: {
-    width: 36, height: 36, borderRadius: 10, backgroundColor: '#FFFBF0',
-    justifyContent: 'center', alignItems: 'center',
-    borderWidth: 1, borderColor: '#EADDCA',
+  actionRowLast: { borderBottomWidth: 0 },
+  actionText: { flex: 1, fontSize: 14, fontWeight: '700', color: '#2A1F1A' },
+
+  // Sign out
+  signOutBtn: {
+    flexDirection: 'row',
+    alignSelf: 'center',
+    marginTop: 32,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 24,
+    backgroundColor: '#FDF5F2',
+    gap: 8,
   },
-  actionText: { flex: 1, fontSize: 15, fontWeight: theme.fonts.semibold, color: theme.colors.textDark },
-  signOutRow: { borderBottomWidth: 0 },
-  signOutIcon: { backgroundColor: '#FFF1F1' },
-  signOutText: { color: '#FF3B30' },
+  signOutText: { color: '#C4604A', fontWeight: '800', fontSize: 14 },
+  genderRow: { flexDirection: 'row', gap: 10, marginTop: 4 },
+  genderChip: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, borderWidth: 1.5, borderColor: '#EDE0D4', backgroundColor: '#FFFFFF' },
+  genderChipActive: { borderColor: '#C4785A', backgroundColor: '#FDF2EC' },
+  genderChipText: { fontSize: 13, color: '#7A6055', fontWeight: '600' },
+  genderChipTextActive: { color: '#C4785A', fontWeight: '800' },
 });

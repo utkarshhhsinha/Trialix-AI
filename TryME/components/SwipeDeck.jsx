@@ -1,123 +1,175 @@
-import React, { useRef, useState, useImperativeHandle, forwardRef } from 'react';
+/**
+ * SwipeDeck.jsx — TrialX AI v5.0
+ * Tinder-style card deck with:
+ * - Swipe RIGHT → match (onSwipeRight)
+ * - Swipe LEFT  → skip (onSwipeLeft)
+ * - Swipe UP    → save to moodboard (onSwipeUp)
+ * - Double tap  → instant wishlist burst
+ * - Long press  → details (handled by parent card via Pressable)
+ * - HOT / SKIP overlay badges (colored, angled)
+ */
+
+import React, { useRef, useState, useImperativeHandle, forwardRef, useEffect } from 'react';
 import { View, Animated, PanResponder, StyleSheet, Dimensions } from 'react-native';
+import * as Haptics from 'expo-haptics';
 
-const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
-const SWIPE_THRESHOLD = SCREEN_W * 0.28;
-const SWIPE_VELOCITY = 0.3;
+const { width: W, height: H } = Dimensions.get('window');
+const SWIPE_H = W * 0.28;     // Horizontal threshold
+const SWIPE_V = H * 0.18;     // Vertical threshold (up swipe)
+const VELOCITY_THRESHOLD = 0.35;
 
-const SwipeDeck = forwardRef(({ cards = [], renderCard, onSwipeRight, onSwipeLeft, stackSize = 3 }, ref) => {
+const SwipeDeck = forwardRef(({
+  cards = [],
+  renderCard,
+  onSwipeRight,
+  onSwipeLeft,
+  onSwipeUp,
+  stackSize = 3,
+  overlayLabels = { right: '✨ TRY ON', left: '✕ SKIP', up: '📌 SAVE' },
+}, ref) => {
   const [topIndex, setTopIndex] = useState(0);
   const position = useRef(new Animated.ValueXY()).current;
+  const hapticFired = useRef(false);
+  const lastTap = useRef(0);
+
+  // Stale closure fix: Store parameters in ref updated every render
+  const stateRef = useRef({ topIndex, cards, onSwipeRight, onSwipeLeft, onSwipeUp });
+  useEffect(() => {
+    stateRef.current = { topIndex, cards, onSwipeRight, onSwipeLeft, onSwipeUp };
+  }, [topIndex, cards, onSwipeRight, onSwipeLeft, onSwipeUp]);
 
   useImperativeHandle(ref, () => ({
-    swipeLeft: () => swipeCard('left'),
-    swipeRight: () => swipeCard('right'),
+    swipeLeft: () => animateSwipe('left'),
+    swipeRight: () => animateSwipe('right'),
+    swipeUp: () => animateSwipe('up'),
   }));
 
-  const panResponder = useRef(
+  const pan = useRef(
     PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onPanResponderMove: (_, { dx, dy }) => {
-        position.setValue({ x: dx, y: dy });
+      // Do not intercept on start: let child pressables get taps
+      onStartShouldSetPanResponder: () => false,
+      // Intercept only when dragging begins (move exceeds 10px)
+      onMoveShouldSetPanResponder: (_, { dx, dy }) => {
+        return Math.abs(dx) > 10 || Math.abs(dy) > 10;
       },
-      onPanResponderRelease: (_, { dx, dy, vx }) => {
-        if (dx > SWIPE_THRESHOLD || vx > SWIPE_VELOCITY) {
-          swipeCard('right');
-        } else if (dx < -SWIPE_THRESHOLD || vx < -SWIPE_VELOCITY) {
-          swipeCard('left');
+      onPanResponderGrant: () => {
+        hapticFired.current = false;
+        Haptics.selectionAsync();
+
+        // Double tap detection on the deck
+        const now = Date.now();
+        if (now - lastTap.current < 300) {
+          lastTap.current = 0;
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+          const { topIndex: curIdx, cards: currentCards, onSwipeRight: swipeRightCb } = stateRef.current;
+          if (swipeRightCb && currentCards[curIdx]) {
+            swipeRightCb(curIdx, currentCards[curIdx]);
+          }
         } else {
-          resetPosition();
+          lastTap.current = now;
+        }
+      },
+      onPanResponderMove: (_, { dx, dy }) => {
+        position.setValue({ x: dx, y: dy * 0.2 });
+        const crossed = Math.abs(dx) > SWIPE_H || dy < -SWIPE_V;
+        if (crossed && !hapticFired.current) {
+          hapticFired.current = true;
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        }
+      },
+      onPanResponderRelease: (_, { dx, dy, vx, vy }) => {
+        if (dy < -SWIPE_V || vy < -VELOCITY_THRESHOLD) {
+          animateSwipe('up');
+        } else if (dx > SWIPE_H || vx > VELOCITY_THRESHOLD) {
+          animateSwipe('right');
+        } else if (dx < -SWIPE_H || vx < -VELOCITY_THRESHOLD) {
+          animateSwipe('left');
+        } else {
+          Animated.spring(position, {
+            toValue: { x: 0, y: 0 },
+            friction: 5, tension: 100, useNativeDriver: true,
+          }).start();
         }
       },
     })
   ).current;
 
-  const swipeCard = (direction) => {
-    const x = direction === 'right' ? SCREEN_W * 1.4 : -SCREEN_W * 1.4;
+  const animateSwipe = (direction) => {
+    const { topIndex: curIdx, cards: currentCards, onSwipeRight: swipeRightCb, onSwipeLeft: swipeLeftCb, onSwipeUp: swipeUpCb } = stateRef.current;
+    if (!currentCards.length) return;
+
+    const x = direction === 'right' ? W * 1.6 : direction === 'left' ? -W * 1.6 : 0;
+    const y = direction === 'up' ? -H * 0.8 : 0;
+
     Animated.timing(position, {
-      toValue: { x, y: 0 },
+      toValue: { x, y },
       duration: 280,
       useNativeDriver: true,
     }).start(() => {
-      setTopIndex((prev) => {
-        const newIdx = prev + 1 >= cards.length ? 0 : prev + 1;
-        if (direction === 'right' && onSwipeRight) onSwipeRight(prev, cards[prev]);
-        if (direction === 'left' && onSwipeLeft) onSwipeLeft(prev, cards[prev]);
-        return newIdx;
-      });
+      const nextIdx = curIdx + 1;
+
+      if (direction === 'right' && swipeRightCb) swipeRightCb(curIdx, currentCards[curIdx]);
+      if (direction === 'left' && swipeLeftCb) swipeLeftCb(curIdx, currentCards[curIdx]);
+      if (direction === 'up' && swipeUpCb) swipeUpCb(curIdx, currentCards[curIdx]);
+
+      setTopIndex(nextIdx);
       position.setValue({ x: 0, y: 0 });
     });
   };
 
-  const resetPosition = () => {
-    Animated.spring(position, {
-      toValue: { x: 0, y: 0 },
-      friction: 6,
-      tension: 80,
-      useNativeDriver: true,
-    }).start();
-  };
+  // Overlay opacities
+  const rightOpacity = position.x.interpolate({ inputRange: [0, SWIPE_H], outputRange: [0, 1], extrapolate: 'clamp' });
+  const leftOpacity = position.x.interpolate({ inputRange: [-SWIPE_H, 0], outputRange: [1, 0], extrapolate: 'clamp' });
+  const upOpacity = position.y.interpolate({ inputRange: [-SWIPE_V, 0], outputRange: [1, 0], extrapolate: 'clamp' });
 
-  const getCardStyle = (cardIndex) => {
-    const offset = cardIndex - topIndex;
-    if (offset < 0) return { display: 'none' };
-    if (offset === 0) {
-      const rotate = position.x.interpolate({
-        inputRange: [-SCREEN_W, 0, SCREEN_W],
-        outputRange: ['-12deg', '0deg', '12deg'],
-        extrapolate: 'clamp',
-      });
-      return {
-        ...StyleSheet.absoluteFillObject,
-        zIndex: 100,
-        transform: [...position.getTranslateTransform(), { rotate }],
-      };
-    }
-    const scale = 1 - offset * 0.04;
-    const translateY = offset * 14;
-    return {
-      ...StyleSheet.absoluteFillObject,
-      zIndex: 100 - offset,
-      transform: [{ scale }, { translateY }],
-    };
-  };
+  const rotate = position.x.interpolate({
+    inputRange: [-W, 0, W], outputRange: ['-10deg', '0deg', '10deg'], extrapolate: 'clamp',
+  });
 
-  // Overlay opacity for left/right labels
-  const rightOpacity = position.x.interpolate({
-    inputRange: [0, SWIPE_THRESHOLD],
-    outputRange: [0, 1],
-    extrapolate: 'clamp',
-  });
-  const leftOpacity = position.x.interpolate({
-    inputRange: [-SWIPE_THRESHOLD, 0],
-    outputRange: [1, 0],
-    extrapolate: 'clamp',
-  });
+  if (cards.length === 0) return null;
 
   const visibleCards = [];
-  const startIdx = topIndex;
   const endIdx = Math.min(topIndex + stackSize, cards.length);
-
-  for (let i = endIdx - 1; i >= startIdx; i--) {
+  for (let i = endIdx - 1; i >= topIndex; i--) {
     const card = cards[i];
     const isTop = i === topIndex;
+    const offset = i - topIndex;
+    const scale = 1 - offset * 0.04;
+    const translateY = offset * 14;
+
+    const cardStyle = isTop
+      ? { transform: [{ translateX: position.x }, { translateY: position.y }, { rotate }], zIndex: 100 }
+      : { transform: [{ scale }, { translateY }], zIndex: 100 - offset };
+
     visibleCards.push(
       <Animated.View
         key={card.id || i}
-        style={[styles.cardContainer, getCardStyle(i)]}
-        {...(isTop ? panResponder.panHandlers : {})}
+        style={[styles.card, cardStyle]}
+        {...(isTop ? pan.panHandlers : {})}
       >
         {renderCard(card, i)}
+
+        {/* Overlays — only on top card */}
         {isTop && (
           <>
-            <Animated.View style={[styles.overlayLabel, styles.overlayRight, { opacity: rightOpacity }]}>
-              <View style={styles.overlayLabelBox}>
-                <Animated.Text style={styles.overlayLabelTextRight}>TRY ON ✨</Animated.Text>
+            {/* ✨ TRY ON (right) */}
+            <Animated.View style={[styles.overlayRight, { opacity: rightOpacity }]}>
+              <View style={styles.badgeRight}>
+                <Animated.Text style={styles.badgeText}>{overlayLabels.right}</Animated.Text>
               </View>
             </Animated.View>
-            <Animated.View style={[styles.overlayLabel, styles.overlayLeft, { opacity: leftOpacity }]}>
-              <View style={styles.overlayLabelBoxLeft}>
-                <Animated.Text style={styles.overlayLabelTextLeft}>SKIP ✕</Animated.Text>
+
+            {/* ✕ SKIP (left) */}
+            <Animated.View style={[styles.overlayLeft, { opacity: leftOpacity }]}>
+              <View style={styles.badgeLeft}>
+                <Animated.Text style={styles.badgeText}>{overlayLabels.left}</Animated.Text>
+              </View>
+            </Animated.View>
+
+            {/* 📌 SAVE (up) */}
+            <Animated.View style={[styles.overlayUp, { opacity: upOpacity }]}>
+              <View style={styles.badgeUp}>
+                <Animated.Text style={styles.badgeText}>{overlayLabels.up}</Animated.Text>
               </View>
             </Animated.View>
           </>
@@ -126,31 +178,45 @@ const SwipeDeck = forwardRef(({ cards = [], renderCard, onSwipeRight, onSwipeLef
     );
   }
 
-  if (cards.length === 0) return null;
-
-  return (
-    <View style={styles.deck}>
-      {visibleCards}
-    </View>
-  );
+  return <View style={styles.deck}>{visibleCards}</View>;
 });
 
 export default SwipeDeck;
 
 const styles = StyleSheet.create({
   deck: { flex: 1 },
-  cardContainer: { position: 'absolute', left: 16, right: 16, top: 0, bottom: 0 },
-  overlayLabel: { position: 'absolute', top: 60 },
-  overlayRight: { right: 24 },
-  overlayLeft: { left: 24 },
-  overlayLabelBox: {
-    backgroundColor: '#0047AB', borderRadius: 12, paddingHorizontal: 16, paddingVertical: 10,
-    borderWidth: 2, borderColor: '#0047AB',
+  card: {
+    position: 'absolute',
+    left: 16, right: 16,
+    top: 0, bottom: 0,
   },
-  overlayLabelBoxLeft: {
-    backgroundColor: '#FF3B30', borderRadius: 12, paddingHorizontal: 16, paddingVertical: 10,
-    borderWidth: 2, borderColor: '#FF3B30',
+
+  // ── Overlays
+  overlayRight: { position: 'absolute', top: 56, right: 18 },
+  overlayLeft: { position: 'absolute', top: 56, left: 18 },
+  overlayUp: { position: 'absolute', top: 20, alignSelf: 'center', left: 0, right: 0, alignItems: 'center' },
+
+  badgeRight: {
+    backgroundColor: '#6B9E7A', borderRadius: 14,
+    paddingHorizontal: 18, paddingVertical: 10,
+    transform: [{ rotate: '14deg' }],
+    shadowColor: '#6B9E7A', shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.35, shadowRadius: 12, elevation: 8,
   },
-  overlayLabelTextRight: { color: 'white', fontWeight: '800', fontSize: 20, letterSpacing: 1 },
-  overlayLabelTextLeft: { color: 'white', fontWeight: '800', fontSize: 20, letterSpacing: 1 },
+  badgeLeft: {
+    backgroundColor: '#C4604A', borderRadius: 14,
+    paddingHorizontal: 18, paddingVertical: 10,
+    transform: [{ rotate: '-14deg' }],
+    shadowColor: '#C4604A', shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.35, shadowRadius: 12, elevation: 8,
+  },
+  badgeUp: {
+    backgroundColor: '#C49A6C', borderRadius: 14,
+    paddingHorizontal: 18, paddingVertical: 10,
+    shadowColor: '#C49A6C', shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.35, shadowRadius: 12, elevation: 8,
+  },
+  badgeText: {
+    color: 'white', fontWeight: '900', fontSize: 17, letterSpacing: 1.2,
+  },
 });
