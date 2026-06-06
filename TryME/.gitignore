@@ -63,3 +63,7 @@ screen.png
 
 # vscode
 .vscode/node_modules.old/
+
+# scratch / debug test files (often contain hardcoded API keys — NEVER commit)
+scratch/
+functions/test_*.js
