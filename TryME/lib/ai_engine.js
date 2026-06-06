@@ -7,8 +7,9 @@
 import * as FileSystem from 'expo-file-system/legacy';
 import * as ImageManipulator from 'expo-image-manipulator';
 import { encode } from 'base64-arraybuffer';
-import { firebaseFunctions } from './firebase';
+import { firebaseFunctions, firestore, firebaseAuth } from './firebase';
 import { httpsCallable } from 'firebase/functions';
+import { doc, getDoc, updateDoc } from 'firebase/firestore';
 
 const FIREBASE_API_KEY = process.env.EXPO_PUBLIC_FIREBASE_API_KEY;
 const VERTEX_PROJECT_ID = process.env.EXPO_PUBLIC_VERTEX_PROJECT_ID || 'aura-ai-powered-fashion-aura';
@@ -286,9 +287,94 @@ export async function identifyGarmentFromImage(imageUrl) {
   }
 }
 
+function formatRemainingTime(ms) {
+  const hours = Math.floor(ms / (3600 * 1000));
+  const mins = Math.ceil((ms % (3600 * 1000)) / (60 * 1000));
+  return `${hours}h ${mins.toString().padStart(2, '0')}m`;
+}
+
 export async function runVirtualTryOn(humanInput, garmentUrl, desc, onStatus, forceGemini = false, category = 'upper_body', options = {}) {
   const fast = options.fast !== false; // default fast for ~4s target
-  return enqueueTryOn(() => _runVirtualTryOnImpl(humanInput, garmentUrl, desc, onStatus, forceGemini, category, fast));
+  const user = firebaseAuth?.currentUser;
+  
+  if (user && firestore) {
+    const profileRef = doc(firestore, 'profiles', user.uid);
+    try {
+      const snap = await getDoc(profileRef);
+      if (snap.exists()) {
+        const data = snap.data();
+        const now = Date.now();
+        
+        // 1. Check if user is currently blocked under the 12-hour block timer
+        if (data.tryOnBlockedUntil && now < data.tryOnBlockedUntil) {
+          const remainingMs = data.tryOnBlockedUntil - now;
+          const timeStr = formatRemainingTime(remainingMs);
+          const err = new Error(`Limit reached. Try-on is blocked. Please wait ${timeStr} before trying on more outfits.`);
+          err.isLimitBlock = true;
+          throw err;
+        }
+
+        // 2. Check if the 24-hour daily cycle has reset
+        let tryOnCountToday = data.tryOnCountToday || 0;
+        let tryOnLastResetTime = data.tryOnLastResetTime || now;
+        
+        if (now - tryOnLastResetTime >= 24 * 3600 * 1000) {
+          tryOnCountToday = 0;
+          tryOnLastResetTime = now;
+          await updateDoc(profileRef, {
+            tryOnCountToday: 0,
+            tryOnLastResetTime: now
+          });
+        }
+
+        // 3. Check if they have already hit the 10 limit (and need to start the 12-hour block)
+        if (tryOnCountToday >= 10) {
+          const blockedUntil = now + 12 * 3600 * 1000;
+          await updateDoc(profileRef, {
+            tryOnBlockedUntil: blockedUntil
+          });
+          const err = new Error(`You have used your 10 try-ons for today. Trial is locked for 12 hours.`);
+          err.isLimitBlock = true;
+          throw err;
+        }
+      }
+    } catch (e) {
+      if (e.isLimitBlock) throw e;
+      console.warn('[AI Quota Check] Failed to check Firestore limit, allowing try-on:', e.message);
+    }
+  }
+
+  // Actually run the try-on implementation
+  const result = await enqueueTryOn(() => _runVirtualTryOnImpl(humanInput, garmentUrl, desc, onStatus, forceGemini, category, fast));
+
+  // Increment tryOnCountToday after successful generation
+  if (user && firestore) {
+    const profileRef = doc(firestore, 'profiles', user.uid);
+    try {
+      const snap = await getDoc(profileRef);
+      if (snap.exists()) {
+        const data = snap.data();
+        const now = Date.now();
+        
+        let tryOnCountToday = (data.tryOnCountToday || 0) + 1;
+        let updates = {
+          tryOnCountToday: tryOnCountToday,
+          tryOnLastResetTime: data.tryOnLastResetTime || now
+        };
+        
+        // If they just hit the limit of 10, start the 12-hour block immediately
+        if (tryOnCountToday >= 10) {
+          updates.tryOnBlockedUntil = now + 12 * 3600 * 1000;
+        }
+        
+        await updateDoc(profileRef, updates);
+      }
+    } catch (e) {
+      console.warn('[AI Quota Increment] Failed to update Firestore try-on stats:', e.message);
+    }
+  }
+
+  return result;
 }
 
 // ── Dev server / Metro asset URL detector (192.168.x.x:8081, 172.x.x.x:8081, localhost:8081, etc.)

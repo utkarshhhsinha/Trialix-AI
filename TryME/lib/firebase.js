@@ -51,6 +51,10 @@ export const firestore = firebaseApp
   ? (() => {
       try {
         const db = initializeFirestore(firebaseApp, {
+          // Auto-detect best transport (WebChannel vs long-polling).
+          // Avoids the 10s offline error on Android emulators and NAT/VPN setups,
+          // without forcing long-polling which can cause issues on some environments.
+          experimentalAutoDetectLongPolling: true,
           ignoreUndefinedProperties: true,
         });
         // Suppress verbose WebChannel transport warnings that spam the Metro console.

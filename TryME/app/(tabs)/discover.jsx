@@ -769,6 +769,19 @@ export default function DiscoverScreen() {
 
     } catch (e) {
       const elapsed = Date.now() - startAnimTime;
+
+      // If this is a daily limit block, don't show the result deck — go back to IDLE
+      if (e?.isLimitBlock) {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+        setStage(STAGE.IDLE);
+        Alert.alert(
+          '⏱ Daily Limit Reached',
+          e.message,
+          [{ text: 'OK', style: 'default' }]
+        );
+        return;
+      }
+
       if (elapsed < 2500) {
         await new Promise(r => setTimeout(r, 2500 - elapsed));
       }

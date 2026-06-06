@@ -123,8 +123,17 @@ export default function TrialRoom() {
       if (elapsed < 2500) {
         await new Promise(r => setTimeout(r, 2500 - elapsed));
       }
-      Alert.alert('Try-on failed', e.message);
-      setResultUrl(productImageUrl || null);
+      // Handle daily limit block — go back to previous screen with a friendly message
+      if (e?.isLimitBlock) {
+        Alert.alert(
+          '⏱ Daily Limit Reached',
+          e.message,
+          [{ text: 'OK', style: 'default', onPress: () => router.back() }]
+        );
+      } else {
+        Alert.alert('Try-on failed', e.message);
+        setResultUrl(productImageUrl || null);
+      }
     } finally {
       setProcessing(false);
     }

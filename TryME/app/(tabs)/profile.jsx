@@ -18,7 +18,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
-import { firebaseAuth, firestore } from '@/lib/firebase';
+import { firebaseAuth, firestore, uploadBase64Image } from '@/lib/firebase';
 import { theme } from '@/constants/theme';
 import { StatusBar } from 'expo-status-bar';
 import Icon from '@/assets/icons';
@@ -164,12 +164,25 @@ export default function Profile() {
           photoUrl = `data:image/jpeg;base64,${rawB64}`;
         }
 
+        let uploadedUrl = '';
+        try {
+          uploadedUrl = await uploadBase64Image(photoUrl, 'base-photos');
+        } catch (storageErr) {
+          console.warn('Storage upload failed, trying base64 fallback in Firestore:', storageErr.message);
+          if (photoUrl.length <= 1048487) {
+            uploadedUrl = photoUrl;
+          } else {
+            throw new Error('Image too large. Please select a smaller photo or check connection.');
+          }
+        }
+
         await setDoc(doc(firestore, 'profiles', user.uid), {
-          basePhotoUrl: photoUrl,
+          basePhotoUrl: uploadedUrl,
           updatedAt: serverTimestamp(),
         }, { merge: true });
 
-        setProfile(prev => ({ ...prev, basePhotoUrl: photoUrl }));
+        setProfile(prev => ({ ...prev, basePhotoUrl: uploadedUrl }));
+        setImageUri(uploadedUrl);
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         Alert.alert('Updated ✨', 'Your try-on photo is live — new looks use it instantly.');
       }
@@ -202,8 +215,16 @@ export default function Profile() {
       let photoUrl = profile?.basePhotoUrl || imageUri;
       if (imageUri && imageUri !== profile?.basePhotoUrl && (imageUri.startsWith('file://') || imageUri.startsWith('content://'))) {
         const base64 = await FileSystem.readAsStringAsync(imageUri, { encoding: 'base64' });
-        if (base64.length <= 1048487) {
-          photoUrl = `data:image/jpeg;base64,${base64}`;
+        const dataUrl = `data:image/jpeg;base64,${base64}`;
+        try {
+          photoUrl = await uploadBase64Image(dataUrl, 'base-photos');
+        } catch (storageErr) {
+          console.warn('Storage upload failed, trying base64 fallback in Firestore:', storageErr.message);
+          if (dataUrl.length <= 1048487) {
+            photoUrl = dataUrl;
+          } else {
+            throw new Error('Image too large to save. Check your connection.');
+          }
         }
       }
       const updated = { name, phone, gender, basePhotoUrl: photoUrl };
