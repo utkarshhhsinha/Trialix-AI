@@ -4,10 +4,11 @@ import {
   getReactNativePersistence, 
   initializeAuth, 
   getAuth, 
-  browserLocalPersistence 
+  browserLocalPersistence,
+  connectAuthEmulator
 } from 'firebase/auth';
-import { initializeFirestore, getFirestore, setLogLevel } from 'firebase/firestore';
-import { getStorage } from 'firebase/storage';
+import { initializeFirestore, getFirestore, setLogLevel, connectFirestoreEmulator } from 'firebase/firestore';
+import { getStorage, connectStorageEmulator } from 'firebase/storage';
 import { getFunctions, connectFunctionsEmulator } from 'firebase/functions';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -50,9 +51,6 @@ export const firestore = firebaseApp
   ? (() => {
       try {
         const db = initializeFirestore(firebaseApp, {
-          // Force HTTP long-polling to prevent WebChannel socket errors
-          // in emulators and devices behind NAT/VPN configurations.
-          experimentalForceLongPolling: true,
           ignoreUndefinedProperties: true,
         });
         // Suppress verbose WebChannel transport warnings that spam the Metro console.
@@ -66,10 +64,29 @@ export const firestore = firebaseApp
 export const storage = firebaseApp ? getStorage(firebaseApp) : null;
 export const firebaseFunctions = firebaseApp ? getFunctions(firebaseApp, "us-central1") : null;
 
-if (__DEV__ && firebaseFunctions) {
+if (__DEV__) {
   const host = Platform.OS === 'android' ? '10.0.2.2' : 'localhost';
-  console.log(`[Firebase] Connecting Functions to local emulator at ${host}:5001`);
-  connectFunctionsEmulator(firebaseFunctions, host, 5001);
+  const useEmulators = process.env.EXPO_PUBLIC_USE_EMULATORS === 'true';
+
+  if (useEmulators) {
+    if (firebaseAuth) {
+      console.log(`[Firebase] Connecting Auth to local emulator at ${host}:9099`);
+      connectAuthEmulator(firebaseAuth, `http://${host}:9099`);
+    }
+    if (firestore) {
+      console.log(`[Firebase] Connecting Firestore to local emulator at ${host}:8080`);
+      connectFirestoreEmulator(firestore, host, 8080);
+    }
+    if (storage) {
+      console.log(`[Firebase] Connecting Storage to local emulator at ${host}:9199`);
+      connectStorageEmulator(storage, host, 9199);
+    }
+  }
+
+  if (firebaseFunctions) {
+    console.log(`[Firebase] Connecting Functions to local emulator at ${host}:5001`);
+    connectFunctionsEmulator(firebaseFunctions, host, 5001);
+  }
 }
 
 export const uploadBase64Image = async (base64Data, path = 'generations') => {

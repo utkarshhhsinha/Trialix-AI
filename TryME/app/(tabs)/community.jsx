@@ -67,13 +67,19 @@ export default function Community() {
     }
 
     setLoading(true);
-    const unsub = subscribeCommunityFeed(
-      (posts) => {
-        setFeed(posts);
-        setLoading(false);
-      },
-      () => setLoading(false)
-    );
+    let unsub = () => { };
+    user.getIdToken().then(() => {
+      unsub = subscribeCommunityFeed(
+        (posts) => {
+          setFeed(posts);
+          setLoading(false);
+        },
+        () => setLoading(false)
+      );
+    }).catch(e => {
+      console.warn('[community feed] token refresh failed:', e.message);
+      setLoading(false);
+    });
     return () => unsub();
   }, [user]);
 
@@ -84,9 +90,12 @@ export default function Community() {
       return;
     }
 
-    const unsub = subscribeUserLikes(user.uid, (likedIds) => {
-      setLikedPosts(likedIds);
-    });
+    let unsub = () => { };
+    user.getIdToken().then(() => {
+      unsub = subscribeUserLikes(user.uid, (likedIds) => {
+        setLikedPosts(likedIds);
+      });
+    }).catch(e => console.warn('[user likes] token refresh failed:', e.message));
     return () => unsub();
   }, [user]);
 

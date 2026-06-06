@@ -85,10 +85,13 @@ export default function Explore() {
       setCommunityLooks([]);
       return;
     }
-    const unsub = subscribeCommunityFeed(
-      (posts) => setCommunityLooks(posts.slice(0, 12)),
-      () => { }
-    );
+    let unsub = () => { };
+    user.getIdToken().then(() => {
+      unsub = subscribeCommunityFeed(
+        (posts) => setCommunityLooks(posts.slice(0, 12)),
+        () => { }
+      );
+    }).catch(e => console.warn('[explore community feed] token refresh failed:', e.message));
     return () => unsub();
   }, [user]);
 

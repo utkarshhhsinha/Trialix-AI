@@ -67,28 +67,35 @@ export default function Profile() {
   useEffect(() => {
     if (!user || !firestore) return;
 
-    const unsubProfile = subscribeUserProfile(user.uid, (d) => {
-      if (d) {
-        setProfile(d);
-        setName(d.name || '');
-        setPhone(d.phone || '');
-        setGender(d.gender || '');
-        setImageUri(d.basePhotoUrl || null);
-        setAuraPoints(typeof d.auraPoints === 'number' ? d.auraPoints : 0);
-        setStreak(typeof d.streak === 'number' ? d.streak : 0);
-        setProfileTryOnCount(typeof d.tryOnCount === 'number' ? d.tryOnCount : 0);
-        setProfilePostCount(typeof d.postCount === 'number' ? d.postCount : 0);
-      }
-    });
+    let unsubProfile = () => { };
+    let unsubCommunity = () => { };
+    let unsubTryOns = () => { };
 
-    const unsubCommunity = subscribeUserCommunityPosts(user.uid, (posts) => {
-      setCommunityPosts(posts);
-      setCommunityVisibleCount(GRID_PAGE_SIZE);
-    });
-    const unsubTryOns = subscribeUserTryOns(user.uid, (items) => {
-      setTryOnItems(items);
-      setTryOnVisibleCount(GRID_PAGE_SIZE);
-    });
+    user.getIdToken().then(() => {
+      unsubProfile = subscribeUserProfile(user.uid, (d) => {
+        if (d) {
+          setProfile(d);
+          setName(d.name || '');
+          setPhone(d.phone || '');
+          setGender(d.gender || '');
+          setImageUri(d.basePhotoUrl || null);
+          setAuraPoints(typeof d.auraPoints === 'number' ? d.auraPoints : 0);
+          setStreak(typeof d.streak === 'number' ? d.streak : 0);
+          setProfileTryOnCount(typeof d.tryOnCount === 'number' ? d.tryOnCount : 0);
+          setProfilePostCount(typeof d.postCount === 'number' ? d.postCount : 0);
+        }
+      });
+
+      unsubCommunity = subscribeUserCommunityPosts(user.uid, (posts) => {
+        setCommunityPosts(posts);
+        setCommunityVisibleCount(GRID_PAGE_SIZE);
+      });
+
+      unsubTryOns = subscribeUserTryOns(user.uid, (items) => {
+        setTryOnItems(items);
+        setTryOnVisibleCount(GRID_PAGE_SIZE);
+      });
+    }).catch(e => console.warn('[profile subscriptions] token refresh failed:', e.message));
 
     return () => {
       unsubProfile();
