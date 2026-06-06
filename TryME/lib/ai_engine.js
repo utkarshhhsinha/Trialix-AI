@@ -1,7 +1,8 @@
 /**
- * ai_engine.js — Multi-Phase AI Orchestrator (v30.0)
- * Primary: Replicate IDM-VTON (if key set) → most accurate virtual try-on
- * Fallback: Gemini 2.5 Flash Image / Nano Banana via paid EXPO_PUBLIC_GEMINI_API_KEY
+ * ai_engine.js — TrialX AI Engine (v31.0)
+ * Primary:  Nano Banana (gemini-2.5-flash-image) via Vertex AI — called directly from client
+ *           using EXPO_PUBLIC_FIREBASE_API_KEY (no Cloud Run IAM issues)
+ * Fallback: Firebase Cloud Function generateTryOn (same model, server-side)
  */
 
 import * as FileSystem from 'expo-file-system/legacy';
@@ -14,7 +15,10 @@ import { doc, getDoc, updateDoc } from 'firebase/firestore';
 const FIREBASE_API_KEY = process.env.EXPO_PUBLIC_FIREBASE_API_KEY;
 const VERTEX_PROJECT_ID = process.env.EXPO_PUBLIC_VERTEX_PROJECT_ID || 'aura-ai-powered-fashion-aura';
 
+// Text-only model for garment analysis
 const VERTEX_TEXT_URL = `https://firebasevertexai.googleapis.com/v1beta/projects/${VERTEX_PROJECT_ID}/locations/us-central1/publishers/google/models/gemini-2.5-flash:generateContent?key=${FIREBASE_API_KEY}`;
+// Nano Banana — image generation model (direct client call, bypasses Cloud Run IAM)
+const VERTEX_IMAGE_URL = `https://firebasevertexai.googleapis.com/v1beta/projects/${VERTEX_PROJECT_ID}/locations/us-central1/publishers/google/models/gemini-2.5-flash-image:generateContent?key=${FIREBASE_API_KEY}`;
 export const TRYON_TARGET_MS = 4000; // UX target — fast path + pregen
 
 let _tryOnQueueTail = Promise.resolve();
@@ -250,7 +254,98 @@ function isValidTryOnResult(resultUrl, garmentUrl) {
   return true;
 }
 
-// Client-side image generation has been securely moved to the backend Firebase Cloud Function.
+/**
+ * runNanoBanana — Virtual try-on via Nano Banana (gemini-2.5-flash-image) on Vertex AI.
+ * Called DIRECTLY from the client using EXPO_PUBLIC_FIREBASE_API_KEY.
+ * No Cloud Function / Cloud Run IAM involved — request goes straight to Vertex AI.
+ */
+async function runNanoBanana(humanB64, garmentB64, desc, category, onStatus) {
+  if (!FIREBASE_API_KEY) throw new Error('EXPO_PUBLIC_FIREBASE_API_KEY is not set');
+
+  const replacementRule = category === 'lower_body'
+    ? 'Replace ONLY the pants/skirt/shorts with the garment in Image 2. Keep the upper body outfit exactly as in Image 1.'
+    : (category === 'dress' || category === 'dresses')
+      ? 'Replace the ENTIRE outfit (both top and bottom) with the dress in Image 2. Remove all previous clothing completely.'
+      : 'Replace ONLY the shirt/top/jacket with the garment in Image 2. Keep the pants/skirt exactly as in Image 1.';
+
+  const bodyPart = category === 'lower_body' ? 'lower body'
+    : (category === 'dress' || category === 'dresses') ? 'full body'
+    : 'upper body';
+
+  const prompt = `VIRTUAL TRY-ON: You are an expert AI fashion designer. Put the garment from Image 2 onto the person in Image 1.
+1. The person's face, hair, skin tone, body shape, pose, and background MUST remain identical to Image 1.
+2. ${replacementRule}
+3. CRITICAL: Completely erase, remove, and replace the existing ${bodyPart} clothing. Do NOT layer over old clothes.
+4. If the new garment has shorter sleeves than the original, COMPLETELY erase the original sleeves and show natural bare arms.
+5. Transfer the exact garment colors, patterns, textures, logos, and text from Image 2. Do NOT simplify details.
+6. CRITICAL: Do NOT return the person unchanged. You MUST apply the garment from Image 2.
+7. Output a 3:4 portrait (768x1024). Center the person with full head, shoulders, and torso visible.
+Garment: ${desc || 'fashion garment'}`;
+
+  const requestBody = {
+    contents: [{
+      role: 'user',
+      parts: [
+        { text: prompt },
+        { text: 'IMAGE 1 — THE PERSON (wear the clothes on this person):' },
+        { inlineData: { mimeType: 'image/jpeg', data: humanB64 } },
+        { text: 'IMAGE 2 — THE GARMENT (put this item of clothing on the person):' },
+        { inlineData: { mimeType: 'image/jpeg', data: garmentB64 } },
+      ],
+    }],
+    generationConfig: {
+      candidateCount: 1,
+      responseModalities: ['TEXT', 'IMAGE'],
+      temperature: 0.15,
+    },
+  };
+
+  onStatus?.('Generating your look…');
+  console.log('[NanoBanana] Calling Vertex AI gemini-2.5-flash-image directly…');
+
+  const res = await fetch(VERTEX_IMAGE_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(requestBody),
+  });
+
+  if (res.status === 429) {
+    const err = new Error('Vertex AI rate limit reached. Try again in a minute.');
+    err.isRateLimit = true;
+    throw err;
+  }
+
+  const responseText = await res.text();
+  let data;
+  try { data = JSON.parse(responseText); } catch {
+    throw new Error(`Vertex AI response not valid JSON: ${responseText.slice(0, 200)}`);
+  }
+
+  if (!res.ok) {
+    const errMsg = data?.error?.message || `HTTP ${res.status}`;
+    throw new Error(`Vertex AI (Nano Banana): ${errMsg}`);
+  }
+
+  // Extract image from response
+  const imagePart = data.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
+  if (imagePart?.inlineData?.data) {
+    console.log('[NanoBanana] Image received successfully.');
+    return `data:${imagePart.inlineData.mimeType || 'image/jpeg'};base64,${imagePart.inlineData.data}`;
+  }
+
+  // Surface any text error from the model
+  const textPart = data.candidates?.[0]?.content?.parts?.find(p => p.text);
+  if (textPart?.text) {
+    throw new Error(`Nano Banana returned text instead of image: "${textPart.text.slice(0, 120)}"`);
+  }
+
+  const finishReason = data.candidates?.[0]?.finishReason;
+  if (finishReason && finishReason !== 'STOP') {
+    throw new Error(`Nano Banana generation blocked: ${finishReason}`);
+  }
+
+  throw new Error('Nano Banana returned no image. Check that image generation is enabled in your Firebase project.');
+}
 
 export async function identifyGarmentFromImage(imageUrl) {
   try {
@@ -442,21 +537,25 @@ async function _runVirtualTryOnImpl(humanInput, garmentUrl, desc, onStatus, forc
   }
 
   const runGen = async () => {
-    if (!firebaseFunctions) {
-      throw new Error('Firebase Functions is not configured/initialized.');
+    // ── PRIMARY: Nano Banana (gemini-2.5-flash-image) called directly on Vertex AI
+    // Uses EXPO_PUBLIC_FIREBASE_API_KEY — no Cloud Run IAM, no extra secrets needed.
+    try {
+      console.log('[AI] Calling Nano Banana directly on Vertex AI (primary path)…');
+      const dataUri = await runNanoBanana(humanB64, garmentB64, enhancedDesc, resolvedCategory, onStatus);
+      if (dataUri) return dataUri;
+    } catch (nanoBananaErr) {
+      // Surface rate-limit errors immediately — don't waste time on the fallback
+      if (nanoBananaErr.isRateLimit) throw nanoBananaErr;
+      console.warn('[AI] Nano Banana direct call failed, trying Cloud Function fallback:', nanoBananaErr.message);
     }
+
+    // ── FALLBACK: Firebase Cloud Function (same model, server-side)
+    if (!firebaseFunctions) throw new Error('Nano Banana failed and Cloud Functions not configured.');
+    console.log('[AI] Routing to Cloud Function fallback…');
     const generateTryOn = httpsCallable(firebaseFunctions, 'generateTryOn');
-    const response = await generateTryOn({
-      humanB64,
-      garmentB64,
-      desc: enhancedDesc,
-      category: resolvedCategory,
-      forceGemini,
-    });
-    if (response?.data?.tryOnImageUrl) {
-      return response.data.tryOnImageUrl;
-    }
-    throw new Error('No try-on image returned from backend Cloud Function.');
+    const response = await generateTryOn({ humanB64, garmentB64, desc: enhancedDesc, category: resolvedCategory, forceGemini });
+    if (response?.data?.tryOnImageUrl) return response.data.tryOnImageUrl;
+    throw new Error('No try-on image returned from Cloud Function fallback.');
   };
 
   const result = await withTimeout(runGen(), 90000, 'Try-on');
@@ -465,11 +564,11 @@ async function _runVirtualTryOnImpl(humanInput, garmentUrl, desc, onStatus, forc
     throw new Error('Invalid try-on result. Please retry.');
   }
 
-  // Convert data: URI to a local file:// URI for reliable React Native Image rendering.
-  // Large inline base64 data URIs (>500KB) can cause silent rendering failures on Android.
+  // Nano Banana returns a base64 data: URI.
+  // Save to local file — large inline base64 can cause silent rendering failures on Android.
   let finalResult = result;
   try {
-    if (result.startsWith('data:')) {
+    if (result && result.startsWith('data:')) {
       const matches = result.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
       if (matches && matches[2]) {
         const tempPath = `${FileSystem.cacheDirectory}tryon_result_${Date.now()}.jpg`;
@@ -480,7 +579,7 @@ async function _runVirtualTryOnImpl(humanInput, garmentUrl, desc, onStatus, forc
     }
   } catch (saveErr) {
     console.warn('[AI] Could not save result to file, using data URI:', saveErr.message);
-    finalResult = result; // Fall back to data URI
+    finalResult = result;
   }
 
   console.log(`[AI] Total pipeline ${((Date.now() - start) / 1000).toFixed(1)}s`);
