@@ -85,11 +85,10 @@ if (__DEV__) {
       console.log(`[Firebase] Connecting Storage to local emulator at ${host}:9199`);
       connectStorageEmulator(storage, host, 9199);
     }
-  }
-
-  if (firebaseFunctions) {
-    console.log(`[Firebase] Connecting Functions to local emulator at ${host}:5001`);
-    connectFunctionsEmulator(firebaseFunctions, host, 5001);
+    if (firebaseFunctions) {
+      console.log(`[Firebase] Connecting Functions to local emulator at ${host}:5001`);
+      connectFunctionsEmulator(firebaseFunctions, host, 5001);
+    }
   }
 }
 

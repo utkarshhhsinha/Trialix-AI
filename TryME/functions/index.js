@@ -156,7 +156,8 @@ Garment: ${desc}`;
 }
 
 exports.generateTryOn = onCall({
-  cors: true
+  cors: true,
+  invoker: "public"
 }, async (request) => {
   // Ensure the caller is authenticated in production
   if (!request.auth) {
@@ -216,7 +217,7 @@ exports.generateTryOn = onCall({
   }
 });
 
-exports.shareLook = onRequest({ cors: true }, (req, res) => {
+exports.shareLook = onRequest({ cors: true, invoker: "public" }, (req, res) => {
   const imageUrl = req.query.image || '';
   const desc = req.query.desc || 'AI-Powered Virtual Fashion Try-On';
   const brand = req.query.brand || 'TrialX';
