@@ -1,12 +1,16 @@
 node_modules
+node_modules 2
 .git
 .expo
 dist
 build
 android
+android_2
 ios
 *.log
+*.apk
 coverage
 .env
 google-services.json
 GoogleService-Info.plist
+functions
