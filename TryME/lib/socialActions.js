@@ -7,6 +7,9 @@ import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { firestore } from '@/lib/firebase';
 import { incrementUserAura, incrementProfileStats } from '@/lib/community';
 
+// NOTE: expo-sharing native module (ExpoSharing) may not be linked in the dev build.
+// We rely solely on React Native's built-in Share API which always works.
+
 export const APP_DOWNLOAD_LINK = 'https://trialix.app';
 
 let MediaLibrary = null;
@@ -148,28 +151,34 @@ export async function downloadTryOnImage(imageUrl) {
  * Share compressed try-on image + app download link.
  * Opens share sheet — pick WhatsApp to send image with caption/link.
  */
-export async function shareTryOnWhatsApp({ imageUrl, title, brand }) {
+export async function shareTryOnWhatsApp({ imageUrl, title, brand, userName }) {
   if (!imageUrl) throw new Error('No image to share');
 
-  const shareUrl = `https://trialix.app/share?image=${encodeURIComponent(imageUrl)}&desc=${encodeURIComponent(title || 'AI Style Look')}&brand=${encodeURIComponent(brand || 'TrialX')}`;
-  const caption = `Check out my AI try-on look on TrialX AI! 👕\n\n${shareUrl}`;
-  const waUrl = `whatsapp://send?text=${encodeURIComponent(caption)}`;
+  const nameTag = userName ? (userName.startsWith('@') ? userName : `@${userName}`) : '@fashionista';
+  const textCaption = `Look out ${nameTag} new looks.\n${APP_DOWNLOAD_LINK}`;
 
   try {
-    const canOpen = await Linking.canOpenURL(waUrl);
-    if (canOpen) {
-      await Linking.openURL(waUrl);
-      return;
+    if (Platform.OS === 'ios') {
+      // iOS: Share.share supports both url and message together
+      const localUri = await resolveImageToLocalUri(imageUrl);
+      await Share.share({
+        url: localUri,
+        message: textCaption,
+      });
+    } else {
+      // Android: React Native Share with message + URL fallback
+      // (expo-sharing native module is not always linked in custom dev builds)
+      const shareContent = imageUrl.startsWith('http')
+        ? { message: `${textCaption}\n${imageUrl}` }
+        : { message: textCaption, url: imageUrl };
+      await Share.share(shareContent, { dialogTitle: `Look out ${nameTag} new looks.` });
     }
   } catch (err) {
-    console.warn('[socialActions] Direct WhatsApp failed:', err.message);
+    console.warn('[socialActions] Share failed, falling back to text only:', err.message);
+    await Share.share({
+      message: `${textCaption}\n${imageUrl}`,
+    });
   }
-
-  // Fallback to system share sheet
-  await Share.share({
-    title: 'TrialX AI Look',
-    message: caption,
-  });
 }
 
 export async function postTryOnToCommunity({ user, profile, card }) {
@@ -188,12 +197,27 @@ export async function postTryOnToCommunity({ user, profile, card }) {
   const caption = template(formattedUserName, card.brand || 'TrialX Brand', card.title || 'Garment');
   const resultImageUrl = await compressImageForFirestore(card.tryOnImageUrl || card.imageUrl);
 
+  let garmentImageUrl = card.productImageUrl || card.imageUrl;
+  if (typeof garmentImageUrl === 'number') {
+    try {
+      const { getCleanBase64 } = require('./ai_engine');
+      const { uploadBase64Image } = require('./firebase');
+      const b64 = await getCleanBase64(garmentImageUrl, 384, 384, 'fit', 0.80);
+      if (b64) {
+        const dataUri = b64.startsWith('data:') ? b64 : `data:image/jpeg;base64,${b64}`;
+        garmentImageUrl = await uploadBase64Image(dataUri, 'garment_thumbs');
+      }
+    } catch (err) {
+      console.warn('[socialActions] Local garment thumb upload failed, using fallback:', err.message);
+    }
+  }
+
   await addDoc(collection(firestore, 'community_posts'), {
     userId: user.uid,
     userName: formattedUserName,
     userPhotoUrl: profile?.basePhotoUrl || null,
     resultImageUrl,
-    garmentImageUrl: card.productImageUrl || card.imageUrl,
+    garmentImageUrl: garmentImageUrl || null,
     garmentDesc: card.title || 'Fashion Fit',
     brand: card.brand || 'TrialX Brand',
     buyLink: card.buyLink || '',

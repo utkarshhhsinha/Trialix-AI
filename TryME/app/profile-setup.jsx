@@ -25,7 +25,7 @@ const GENDERS = ['Male', 'Female', 'Non-binary', 'Prefer not to say'];
 const STEPS = ['Photo', 'About you', 'Ready'];
 
 const STEP_META = [
-  { title: 'Add your best photo', sub: 'Full-body shots work best for AI try-on magic ✨', emoji: '📸' },
+  { title: 'Upload your trial photo', sub: 'Full-body shot in fitted clothes — this is used for all AI try-ons ✨', emoji: '📸' },
   { title: 'Tell us about you', sub: 'So we can personalize your style feed', emoji: '✨' },
   { title: "You're ready to slay", sub: 'Swipe right on outfits and try them on instantly', emoji: '🔥' },
 ];
@@ -59,29 +59,45 @@ export default function ProfileSetup() {
       if (!u) { router.replace('/login'); return; }
       setUser(u);
 
+      // Pre-fill name from auth provider — but never auto-fill the photo
+      // from Google or from an existing profile URL. The user must always
+      // upload their own full-body trial photo.
+      if (u.displayName) setName(u.displayName);
+
       try {
         const snap = await getDoc(doc(firestore, 'profiles', u.uid));
         if (snap.exists()) {
           const data = snap.data();
+          // Pre-fill text fields from existing profile
           if (data.name) setName(data.name);
           if (data.phone) setPhone(data.phone);
           if (data.gender) setGender(data.gender);
-          if (data.basePhotoUrl) {
-            setImageUri(data.basePhotoUrl);
-            setPhotoMode('google');
-            if (data.name) {
-              router.replace('/(tabs)/discover');
-            } else {
-              setStep(1);
-            }
+
+          // If the profile already has a properly uploaded photo (Storage URL),
+          // reuse it and skip straight to discover — the user already set up.
+          // Never reuse a Google avatar URL (accounts.google.com / googleusercontent.com).
+          const storedUrl = data.basePhotoUrl || '';
+          const isRealUpload =
+            storedUrl.includes('firebasestorage.googleapis.com') ||
+            storedUrl.startsWith('file://') ||
+            (storedUrl.startsWith('http') &&
+              !storedUrl.includes('googleusercontent.com') &&
+              !storedUrl.includes('accounts.google.com'));
+
+          if (isRealUpload && data.name) {
+            // Profile is complete with a real uploaded photo — go straight to the app
+            router.replace('/(tabs)/discover');
+          } else if (isRealUpload) {
+            // Has a photo but no name yet — jump to step 1
+            setImageUri(storedUrl);
+            setPhotoMode('gallery');
+            setStep(1);
           }
-        } else {
-          if (u.displayName) setName(u.displayName);
-          if (u.photoURL) { setImageUri(u.photoURL); setPhotoMode('google'); }
+          // Otherwise fall through to step 0 — user must upload a real photo
         }
       } catch (e) {
-        if (u.displayName) setName(u.displayName);
-        if (u.photoURL) { setImageUri(u.photoURL); setPhotoMode('google'); }
+        // Firestore unavailable — just pre-fill name, leave photo blank
+        console.warn('[ProfileSetup] Could not read existing profile:', e.message);
       }
     });
     return () => unsub();
@@ -115,7 +131,8 @@ export default function ProfileSetup() {
 
   const uploadPhoto = async () => {
     if (!imageUri || photoMode === 'url') return imageUrl || imageUri;
-    if (photoMode === 'google') return imageUri;
+    // Always upload to Firebase Storage — never return a Google avatar URL directly,
+    // since it is a small thumbnail and can expire or be inaccessible by the AI function.
     if (!storage) return imageUri;
 
     const uid = user?.uid || firebaseAuth?.currentUser?.uid || ('guest_' + Date.now());
@@ -411,8 +428,8 @@ export default function ProfileSetup() {
                         <View style={styles.photoIconCircle}>
                           <Ionicons name="add" size={36} color="#C4785A" />
                         </View>
-                        <Text style={styles.photoEmptyTitle}>Add photo</Text>
-                        <Text style={styles.photoEmptySub}>Tap to upload from gallery</Text>
+                        <Text style={styles.photoEmptyTitle}>Add trial photo</Text>
+                        <Text style={styles.photoEmptySub}>Tap to upload from gallery{'\n'}Used for all AI try-ons</Text>
                       </View>
                     )}
                   </Pressable>
@@ -425,16 +442,6 @@ export default function ProfileSetup() {
                       <Ionicons name="images-outline" size={18} color={photoMode === 'gallery' ? '#C4785A' : '#7A6055'} />
                       <Text style={[styles.sourceText, photoMode === 'gallery' && styles.sourceTextActive]}>Gallery</Text>
                     </Pressable>
-
-                    {user?.photoURL ? (
-                      <Pressable
-                        style={[styles.sourcePill, photoMode === 'google' && styles.sourcePillActive]}
-                        onPress={() => { setImageUri(user.photoURL); setPhotoMode('google'); }}
-                      >
-                        <Ionicons name="logo-google" size={18} color={photoMode === 'google' ? '#C4785A' : '#7A6055'} />
-                        <Text style={[styles.sourceText, photoMode === 'google' && styles.sourceTextActive]}>Google</Text>
-                      </Pressable>
-                    ) : null}
 
                     <Pressable
                       style={[styles.sourcePill, photoMode === 'url' && styles.sourcePillActive]}
@@ -463,7 +470,9 @@ export default function ProfileSetup() {
 
                   <View style={styles.tipBox}>
                     <Ionicons name="bulb-outline" size={18} color="#C4785A" />
-                    <Text style={styles.tipText}>Stand straight, good lighting, full body visible — like a dating profile pic.</Text>
+                    <Text style={styles.tipText}>
+                      This photo is used for every AI outfit try-on. Stand straight, good lighting, full body visible, fitted clothes — like a fitting-room selfie.
+                    </Text>
                   </View>
                 </View>
               )}

@@ -98,7 +98,15 @@ export default function Index() {
           snap = await getDoc(doc(firestore, 'profiles', user.uid));
         }
         const data = snap?.data?.();
-        if (snap?.exists?.() && data?.name && data?.basePhotoUrl) {
+        const storedUrl = data?.basePhotoUrl || '';
+        const isRealUpload =
+          storedUrl.includes('firebasestorage.googleapis.com') ||
+          storedUrl.startsWith('file://') ||
+          (storedUrl.startsWith('http') &&
+            !storedUrl.includes('googleusercontent.com') &&
+            !storedUrl.includes('accounts.google.com'));
+
+        if (snap?.exists?.() && data?.name && isRealUpload) {
           setStatus('ready');
         } else {
           setStatus('no-profile');

@@ -20,6 +20,8 @@ const VERTEX_TEXT_URL = `https://firebasevertexai.googleapis.com/v1beta/projects
 // Nano Banana — image generation model (direct client call, bypasses Cloud Run IAM)
 const VERTEX_IMAGE_URL = `https://firebasevertexai.googleapis.com/v1beta/projects/${VERTEX_PROJECT_ID}/locations/us-central1/publishers/google/models/gemini-2.5-flash-image:generateContent?key=${FIREBASE_API_KEY}`;
 export const TRYON_TARGET_MS = 4000; // UX target — fast path + pregen
+export const DAILY_TRYON_LIMIT = 100; // raised from 10 to 100
+export const TRYON_BLOCK_DURATION_MS = 12 * 3600 * 1000; // 12 hours
 
 let _tryOnQueueTail = Promise.resolve();
 let _quotaBlockedUntil = 0;
@@ -97,10 +99,11 @@ export async function extractGarmentFromUrl(productUrl) {
 }
 
 /** Resize preserving aspect ratio (best for Gemini) or fixed stretch (IDM-VTON) */
-async function getCleanBase64(input, width = 768, height = 1024, mode = 'fit', quality = 0.70) {
+export async function getCleanBase64(input, width = 512, height = 640, mode = 'fit', quality = 0.80) {
   try {
     if (!input) return '';
 
+    const rand = Math.random().toString(36).substring(2, 9);
     let localUri = input;
 
     if (typeof input === 'number') {
@@ -147,7 +150,7 @@ async function getCleanBase64(input, width = 768, height = 1024, mode = 'fit', q
 
     if (localUri.startsWith('data:') || localUri.includes('base64,') || isRawBase64) {
       const b64Part = localUri.includes('base64,') ? localUri.split('base64,')[1] : localUri;
-      const tempPath = `${FileSystem.cacheDirectory}temp_b64_${Date.now()}.jpg`;
+      const tempPath = `${FileSystem.cacheDirectory}temp_b64_${Date.now()}_${rand}.jpg`;
       await FileSystem.writeAsStringAsync(tempPath, b64Part, { encoding: 'base64' });
       localUri = tempPath;
     } else if (localUri.startsWith('http')) {
@@ -164,19 +167,19 @@ async function getCleanBase64(input, width = 768, height = 1024, mode = 'fit', q
           
           const arrayBuffer = await response.arrayBuffer();
           const base64Data = encode(arrayBuffer);
-          const tempPath = `${FileSystem.cacheDirectory}temp_dev_asset_${Date.now()}.jpg`;
+          const tempPath = `${FileSystem.cacheDirectory}temp_dev_asset_${Date.now()}_${rand}.jpg`;
           await FileSystem.writeAsStringAsync(tempPath, base64Data, { encoding: 'base64' });
           localUri = tempPath;
         } catch (err) {
           console.warn('[AI] Failed to fetch dev-asset via HTTP fetch:', err.message);
           // Fallback to FileSystem.downloadAsync just in case
-          const tempPath = `${FileSystem.cacheDirectory}temp_dl_${Date.now()}.jpg`;
+          const tempPath = `${FileSystem.cacheDirectory}temp_dl_${Date.now()}_${rand}.jpg`;
           const dl = await FileSystem.downloadAsync(localUri, tempPath);
           localUri = dl.uri;
         }
       } else {
         console.log('[AI] Downloading remote image natively:', localUri.slice(0, 80));
-        const tempPath = `${FileSystem.cacheDirectory}temp_dl_${Date.now()}.jpg`;
+        const tempPath = `${FileSystem.cacheDirectory}temp_dl_${Date.now()}_${rand}.jpg`;
         const dl = await FileSystem.downloadAsync(localUri, tempPath, {
           headers: {
             'User-Agent': 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36',
@@ -200,7 +203,7 @@ async function getCleanBase64(input, width = 768, height = 1024, mode = 'fit', q
 
       let targetWidth = width;
       let targetHeight = height;
-      const maxDim = 400; // Smaller = faster API processing & smaller payloads
+      const maxDim = Math.max(width, height);
 
       if (origWidth && origHeight) {
         if (origWidth > origHeight) {
@@ -219,7 +222,7 @@ async function getCleanBase64(input, width = 768, height = 1024, mode = 'fit', q
       const manipulated = await ImageManipulator.manipulateAsync(
         localUri,
         [{ resize: { width: targetWidth, height: targetHeight } }],
-        { compress: 0.60, format: ImageManipulator.SaveFormat.JPEG, base64: true }
+        { compress: quality, format: ImageManipulator.SaveFormat.JPEG, base64: true }
       );
       base64Result = manipulated.base64;
     } catch (manipErr) {
@@ -359,6 +362,7 @@ export async function identifyGarmentFromImage(imageUrl) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         contents: [{
+          role: 'user',
           parts: [
             { text: SYSTEM_PROMPTS.FASHION_ANALYSIS },
             { inlineData: { mimeType: 'image/jpeg', data: imageBase64 } },
@@ -383,8 +387,9 @@ export async function identifyGarmentFromImage(imageUrl) {
 }
 
 function formatRemainingTime(ms) {
-  const hours = Math.floor(ms / (3600 * 1000));
-  const mins = Math.ceil((ms % (3600 * 1000)) / (60 * 1000));
+  const totalMinutes = Math.ceil(ms / (60 * 1000));
+  const hours = Math.floor(totalMinutes / 60);
+  const mins = totalMinutes % 60;
   return `${hours}h ${mins.toString().padStart(2, '0')}m`;
 }
 
@@ -402,11 +407,21 @@ export async function runVirtualTryOn(humanInput, garmentUrl, desc, onStatus, fo
         
         // 1. Check if user is currently blocked under the 12-hour block timer
         if (data.tryOnBlockedUntil && now < data.tryOnBlockedUntil) {
-          const remainingMs = data.tryOnBlockedUntil - now;
-          const timeStr = formatRemainingTime(remainingMs);
-          const err = new Error(`Limit reached. Try-on is blocked. Please wait ${timeStr} before trying on more outfits.`);
-          err.isLimitBlock = true;
-          throw err;
+          // If the daily count is under the current limit, the block is stale
+          // (limit was raised since the block was written) — clear it automatically.
+          const currentCount = data.tryOnCountToday || 0;
+          if (currentCount < DAILY_TRYON_LIMIT) {
+            console.log('[AI Quota] Stale block detected — count is under new limit. Clearing block.');
+            await updateDoc(profileRef, { tryOnBlockedUntil: null }).catch(() => {});
+            // Fall through to proceed with the try-on
+          } else {
+            const remainingMs = data.tryOnBlockedUntil - now;
+            const timeStr = formatRemainingTime(remainingMs);
+            const err = new Error(`Limit reached. Try-on is blocked. Please wait ${timeStr} before trying on more outfits.`);
+            err.isLimitBlock = true;
+            err.blockedUntil = data.tryOnBlockedUntil;
+            throw err;
+          }
         }
 
         // 2. Check if the 24-hour daily cycle has reset
@@ -422,14 +437,15 @@ export async function runVirtualTryOn(humanInput, garmentUrl, desc, onStatus, fo
           });
         }
 
-        // 3. Check if they have already hit the 10 limit (and need to start the 12-hour block)
-        if (tryOnCountToday >= 10) {
-          const blockedUntil = now + 12 * 3600 * 1000;
+        // 3. Check if they have already hit the daily limit (and need to start the 12-hour block)
+        if (tryOnCountToday >= DAILY_TRYON_LIMIT) {
+          const blockedUntil = now + TRYON_BLOCK_DURATION_MS;
           await updateDoc(profileRef, {
             tryOnBlockedUntil: blockedUntil
           });
-          const err = new Error(`You have used your 10 try-ons for today. Trial is locked for 12 hours.`);
+          const err = new Error(`You have used your ${DAILY_TRYON_LIMIT} try-ons for today. Trial is locked for 12 hours.`);
           err.isLimitBlock = true;
+          err.blockedUntil = blockedUntil;
           throw err;
         }
       }
@@ -457,9 +473,9 @@ export async function runVirtualTryOn(humanInput, garmentUrl, desc, onStatus, fo
           tryOnLastResetTime: data.tryOnLastResetTime || now
         };
         
-        // If they just hit the limit of 10, start the 12-hour block immediately
-        if (tryOnCountToday >= 10) {
-          updates.tryOnBlockedUntil = now + 12 * 3600 * 1000;
+        // If they just hit the daily limit, start the 12-hour block immediately
+        if (tryOnCountToday >= DAILY_TRYON_LIMIT) {
+          updates.tryOnBlockedUntil = now + TRYON_BLOCK_DURATION_MS;
         }
         
         await updateDoc(profileRef, updates);
@@ -489,7 +505,8 @@ async function _runVirtualTryOnImpl(humanInput, garmentUrl, desc, onStatus, forc
   onStatus?.('Preparing…');
 
   const PLACEHOLDER = 'https://images.unsplash.com/photo-1521572267360-ee0c2909d518?q=80&w=1000&auto=format&fit=crop';
-  const imgW = fast ? 384 : 768;
+  const imgW = 512;
+  const imgH = 640;
 
   // Skip product-link resolution for local Metro dev server URLs — they are already direct image URLs.
   // Fetching a Metro asset URL as HTML will always time out.
@@ -506,8 +523,8 @@ async function _runVirtualTryOnImpl(humanInput, garmentUrl, desc, onStatus, forc
   // Analysis is only run for generic user uploads and is capped at 5 seconds to prevent pipeline timeouts.
   // Note: identifyGarmentFromImage is also skipped for Metro assets since we know these are pre-labelled sample garments.
   const [humanB64, garmentB64, analysis] = await Promise.all([
-    getCleanBase64(humanInput, imgW, imgW, 'fit', 0.70),
-    getCleanBase64(garmentHttpUrl, imgW, imgW, 'fit', 0.70),
+    getCleanBase64(humanInput, imgW, imgH, 'fit', 0.80),
+    getCleanBase64(garmentHttpUrl, imgW, imgH, 'fit', 0.80),
     isGeneric && typeof garmentHttpUrl === 'string' && !isMetroAssetUrl(garmentHttpUrl)
       ? withTimeout(identifyGarmentFromImage(garmentHttpUrl), 5000, 'Fashion analysis').catch(() => null)
       : Promise.resolve(null),
@@ -533,6 +550,18 @@ async function _runVirtualTryOnImpl(humanInput, garmentUrl, desc, onStatus, forc
 
     if (analysis.category) {
       resolvedCategory = analysis.category;
+    }
+  } else {
+    // If analysis failed/returned null, check if description is generic and refine based on category
+    const isGenericDesc = !desc || desc.toLowerCase().includes('my uploaded') || desc.toLowerCase() === 'clothing' || desc.toLowerCase() === 'garment' || desc.toLowerCase() === 'fashion garment';
+    if (isGenericDesc) {
+      if (resolvedCategory === 'lower_body') {
+        enhancedDesc = 'pants, skirt, or shorts';
+      } else if (resolvedCategory === 'dress' || resolvedCategory === 'dresses') {
+        enhancedDesc = 'a dress';
+      } else {
+        enhancedDesc = 'a shirt, top, or jacket';
+      }
     }
   }
 
@@ -571,7 +600,8 @@ async function _runVirtualTryOnImpl(humanInput, garmentUrl, desc, onStatus, forc
     if (result && result.startsWith('data:')) {
       const matches = result.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
       if (matches && matches[2]) {
-        const tempPath = `${FileSystem.cacheDirectory}tryon_result_${Date.now()}.jpg`;
+        const rand = Math.random().toString(36).substring(2, 9);
+        const tempPath = `${FileSystem.cacheDirectory}tryon_result_${Date.now()}_${rand}.jpg`;
         await FileSystem.writeAsStringAsync(tempPath, matches[2], { encoding: 'base64' });
         finalResult = tempPath;
         console.log('[AI] Result saved to local file:', tempPath);

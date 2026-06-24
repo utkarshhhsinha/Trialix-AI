@@ -65,6 +65,10 @@ service cloud.firestore {
       allow write: if isOwner(docId);
     }
 
+    match /daily_picks/{userId} {
+      allow read, write: if isOwner(userId);
+    }
+
     // Collection group rule to allow querying all 'likes' collections at once
     match /{path=**}/likes/{likeUserId} {
       allow read: if isSignedIn();

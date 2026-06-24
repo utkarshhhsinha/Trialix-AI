@@ -21,6 +21,7 @@ import { subscribeCommunityFeed } from '@/lib/community';
 import { shareTryOnWhatsApp } from '@/lib/socialActions';
 import { useRouter } from 'expo-router';
 import Icon from '@/assets/icons';
+import { WOMEN_TOPS } from '@/constants/womenTops';
 
 const { width: W } = Dimensions.get('window');
 const COL = (W - 48) / 2;
@@ -185,6 +186,21 @@ export default function Explore() {
           </>
         )}
 
+        {/* ── Women's Tops */}
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>Women's Tops</Text>
+          <Text style={styles.sectionSub}>19 styles</Text>
+        </View>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.topsRow}
+        >
+          {WOMEN_TOPS.map(top => (
+            <WomenTopCard key={top.id} item={top} />
+          ))}
+        </ScrollView>
+
         {/* ── Mood Collections (Spotify-style) */}
         <Text style={styles.sectionTitle}>Mood Collections</Text>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.moodsRow}>
@@ -245,6 +261,44 @@ function TrendCard({ item }) {
         <Text style={styles.trendPrice}>₹{item.priceINR}</Text>
       </View>
     </Pressable>
+  );
+}
+
+function WomenTopCard({ item }) {
+  return (
+    <View style={styles.womenTopCard}>
+      {/* Product image */}
+      <Pressable
+        style={styles.womenTopImgWrap}
+        onPress={() => item.buyLink && Linking.openURL(item.buyLink).catch(() => {})}
+      >
+        <Image
+          source={item.image}
+          style={styles.womenTopImg}
+          resizeMode="cover"
+        />
+        <LinearGradient
+          colors={['transparent', 'rgba(42,31,26,0.7)']}
+          style={styles.womenTopGrad}
+        />
+        <View style={styles.womenTopPriceChip}>
+          <Text style={styles.womenTopPriceText}>₹{item.priceINR}</Text>
+        </View>
+      </Pressable>
+
+      {/* Info */}
+      <View style={styles.womenTopInfo}>
+        <Text style={styles.womenTopBrand} numberOfLines={1}>{item.brand.toUpperCase()}</Text>
+        <Text style={styles.womenTopTitle} numberOfLines={2}>{item.title}</Text>
+        <Pressable
+          style={styles.womenTopBuyBtn}
+          onPress={() => item.buyLink && Linking.openURL(item.buyLink).catch(() => {})}
+        >
+          <Ionicons name="cart-outline" size={13} color="white" />
+          <Text style={styles.womenTopBuyBtnText}>Buy Now</Text>
+        </Pressable>
+      </View>
+    </View>
   );
 }
 
@@ -341,4 +395,87 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   auraText: { fontSize: 12, fontWeight: '800', color: '#FFFFFF', letterSpacing: 0.3 },
+
+  // ── Women's Tops horizontal strip
+  topsRow: { paddingHorizontal: 20, gap: 14, paddingBottom: 28 },
+
+  womenTopCard: {
+    width: 148,
+    borderRadius: 20,
+    backgroundColor: '#FFFFFF',
+    overflow: 'hidden',
+    shadowColor: '#2A1F1A',
+    shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: 0.07,
+    shadowRadius: 12,
+    elevation: 4,
+    borderWidth: 1,
+    borderColor: '#EDE0D4',
+  },
+  womenTopImgWrap: {
+    width: '100%',
+    height: 180,
+    position: 'relative',
+  },
+  womenTopImg: {
+    width: '100%',
+    height: '100%',
+  },
+  womenTopGrad: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: '45%',
+  },
+  womenTopPriceChip: {
+    position: 'absolute',
+    bottom: 8,
+    left: 8,
+    backgroundColor: '#C4785A',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 10,
+  },
+  womenTopPriceText: {
+    color: 'white',
+    fontSize: 11,
+    fontWeight: '900',
+  },
+  womenTopInfo: {
+    padding: 10,
+    gap: 4,
+  },
+  womenTopBrand: {
+    fontSize: 9,
+    fontWeight: '800',
+    color: '#C4785A',
+    letterSpacing: 1.5,
+  },
+  womenTopTitle: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#2A1F1A',
+    lineHeight: 16,
+  },
+  womenTopBuyBtn: {
+    marginTop: 6,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 5,
+    height: 34,
+    backgroundColor: '#C4785A',
+    borderRadius: 12,
+    shadowColor: '#C4785A',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.18,
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  womenTopBuyBtnText: {
+    color: 'white',
+    fontWeight: '800',
+    fontSize: 12,
+  },
 });

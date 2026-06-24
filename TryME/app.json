@@ -29,6 +29,7 @@
       "favicon": "./assets/images/favicon.png"
     },
     "plugins": [
+      "expo-dev-client",
       "expo-router",
       [
         "expo-build-properties",
@@ -49,6 +50,14 @@
       ],
       "@react-native-google-signin/google-signin",
       "expo-asset",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/adaptive-icon.png",
+          "color": "#C4785A",
+          "sounds": []
+        }
+      ],
       [
         "expo-media-library",
         {
@@ -72,7 +81,9 @@
       "policy": "appVersion"
     },
     "updates": {
-      "url": "https://u.expo.dev/70e57dac-654a-46f6-8ac7-1af7e4bee87c"
+      "url": "https://u.expo.dev/70e57dac-654a-46f6-8ac7-1af7e4bee87c",
+      "checkAutomatically": "ON_ERROR_RECOVERY",
+      "fallbackToCacheTimeout": 0
     }
   }
 }

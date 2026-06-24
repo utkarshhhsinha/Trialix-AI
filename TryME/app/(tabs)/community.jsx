@@ -9,6 +9,7 @@ import {
   View, Text, StyleSheet, FlatList, Pressable, Image,
   Dimensions, Alert, Modal, TextInput, KeyboardAvoidingView,
   Platform, Animated, ScrollView, ActivityIndicator,
+  InteractionManager,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -35,6 +36,24 @@ import {
 
 const { width: W, height: H } = Dimensions.get('window');
 
+const resolveImageSource = (source) => {
+  if (!source) return null;
+  if (typeof source === 'number') return source;
+  if (typeof source === 'string') {
+    if (source.startsWith('http') || source.startsWith('data:') || source.startsWith('file://')) {
+      return { uri: source };
+    }
+    const num = Number(source);
+    if (!isNaN(num) && source.trim() !== '') {
+      return num;
+    }
+  }
+  if (typeof source === 'object' && source.uri) {
+    return source;
+  }
+  return null;
+};
+
 export default function Community() {
   const router = useRouter();
   const [user, setUser] = useState(null);
@@ -58,7 +77,7 @@ export default function Community() {
     return () => unsub();
   }, []);
 
-  // Real-time community feed
+  // Real-time community feed — deferred until tab transition completes
   useEffect(() => {
     if (!user) {
       setFeed([]);
@@ -67,8 +86,8 @@ export default function Community() {
     }
 
     setLoading(true);
-    let unsub = () => { };
-    user.getIdToken().then(() => {
+    let unsub = null;
+    const task = InteractionManager.runAfterInteractions(() => {
       unsub = subscribeCommunityFeed(
         (posts) => {
           setFeed(posts);
@@ -76,27 +95,27 @@ export default function Community() {
         },
         () => setLoading(false)
       );
-    }).catch(e => {
-      console.warn('[community feed] token refresh failed:', e.message);
-      setLoading(false);
     });
-    return () => unsub();
+    return () => {
+      task.cancel();
+      if (unsub) unsub();
+    };
   }, [user]);
 
-  // Real-time user likes
+  // Real-time user likes — deferred until tab transition completes
   useEffect(() => {
     if (!user) {
       setLikedPosts({});
       return;
     }
-
-    let unsub = () => { };
-    user.getIdToken().then(() => {
-      unsub = subscribeUserLikes(user.uid, (likedIds) => {
-        setLikedPosts(likedIds);
-      });
-    }).catch(e => console.warn('[user likes] token refresh failed:', e.message));
-    return () => unsub();
+    let unsub = null;
+    const task = InteractionManager.runAfterInteractions(() => {
+      unsub = subscribeUserLikes(user.uid, setLikedPosts);
+    });
+    return () => {
+      task.cancel();
+      if (unsub) unsub();
+    };
   }, [user]);
 
   // Real-time comments for active post
@@ -179,7 +198,7 @@ export default function Community() {
     }
   };
 
-  const handleWhatsAppShare = async (item) => {
+  const handleShare = async (item) => {
     if (!item?.resultImageUrl) {
       Alert.alert('Share Failed', 'No image available for this post.');
       return;
@@ -190,9 +209,10 @@ export default function Community() {
         imageUrl: item.resultImageUrl,
         title: item.garmentDesc,
         brand: item.brand,
+        userName: item.userName,
       });
     } catch (err) {
-      Alert.alert('Share Failed', err.message || 'Could not share to WhatsApp.');
+      Alert.alert('Share Failed', err.message || 'Could not share this look.');
     }
   };
 
@@ -217,18 +237,25 @@ export default function Community() {
 
   const renderReelItem = ({ item }) => {
     const isLiked = likedPosts[item.id];
+    const bgSrc = resolveImageSource(item.resultImageUrl);
+    const userSrc = resolveImageSource(item.userPhotoUrl);
+    const garmentSrc = resolveImageSource(item.garmentImageUrl);
 
     return (
       <View style={styles.reelItem}>
-        <Image source={{ uri: item.resultImageUrl }} style={styles.backgroundImage} resizeMode="cover" />
+        {bgSrc ? (
+          <Image source={bgSrc} style={styles.backgroundImage} resizeMode="cover" />
+        ) : (
+          <View style={[styles.backgroundImage, { backgroundColor: '#1A1512' }]} />
+        )}
         <LinearGradient colors={['rgba(42,31,26,0.3)', 'transparent']} style={styles.gradientTop} />
         <LinearGradient colors={['transparent', 'rgba(42,31,26,0.85)']} style={styles.gradientBottom} />
 
         <View style={styles.actionColumn}>
           <View style={styles.avatarContainer}>
             <Pressable style={styles.avatarWrap} onPress={() => router.push('/(tabs)/profile')}>
-              {item.userPhotoUrl ? (
-                <Image source={{ uri: item.userPhotoUrl }} style={styles.avatarImg} />
+              {userSrc ? (
+                <Image source={userSrc} style={styles.avatarImg} />
               ) : (
                 <Text style={{ fontSize: 18 }}>🪞</Text>
               )}
@@ -239,19 +266,19 @@ export default function Community() {
             <View style={[styles.iconCircle, isLiked && styles.likedCircle]}>
               <Icon name="heart" size={24} color={isLiked ? '#C4604A' : 'white'} fill={isLiked ? '#C4604A' : 'transparent'} />
             </View>
-            <Text style={styles.actionText}>{item.likes}</Text>
+            <Text style={styles.actionText}>{item.likes ?? 0}</Text>
           </Pressable>
 
           <Pressable style={styles.actionBtn} onPress={() => handleOpenComments(item)}>
             <View style={styles.iconCircle}>
               <Icon name="comment" size={24} color="white" />
             </View>
-            <Text style={styles.actionText}>{item.commentsCount}</Text>
+            <Text style={styles.actionText}>{item.commentsCount ?? 0}</Text>
           </Pressable>
 
-          <Pressable style={styles.actionBtn} onPress={() => handleWhatsAppShare(item)}>
-            <View style={[styles.iconCircle, { backgroundColor: 'rgba(37,211,102,0.35)' }]}>
-              <Ionicons name="logo-whatsapp" size={24} color="white" />
+          <Pressable style={styles.actionBtn} onPress={() => handleShare(item)}>
+            <View style={styles.iconCircle}>
+              <Ionicons name="share-social-outline" size={24} color="white" />
             </View>
             <Text style={styles.actionText}>Share</Text>
           </Pressable>
@@ -261,19 +288,27 @@ export default function Community() {
 
         <View style={styles.infoContainer}>
           <View style={styles.usernameRow}>
-            <Text style={styles.usernameText}>{item.userName}</Text>
-            <View style={styles.rankBadge}>
-              <Text style={styles.rankText}>{item.rank}</Text>
-            </View>
+            <Text style={styles.usernameText}>{item.userName || 'Anonymous'}</Text>
+            {item.rank ? (
+              <View style={styles.rankBadge}>
+                <Text style={styles.rankText}>{item.rank}</Text>
+              </View>
+            ) : null}
           </View>
-          <Text style={styles.captionText} numberOfLines={2}>{item.caption}</Text>
+          <Text style={styles.captionText} numberOfLines={2}>{item.caption || ''}</Text>
 
           <Pressable style={styles.tryOnBanner} onPress={() => handleTryOnRedirect(item)}>
             <View style={styles.tryOnInfo}>
-              <Image source={{ uri: item.garmentImageUrl }} style={styles.tryOnThumb} />
+              {garmentSrc ? (
+                <Image source={garmentSrc} style={styles.tryOnThumb} />
+              ) : (
+                <View style={[styles.tryOnThumb, { backgroundColor: '#EDE0D4', justifyContent: 'center', alignItems: 'center' }]}>
+                  <Ionicons name="shirt-outline" size={16} color="#C4785A" />
+                </View>
+              )}
               <View>
-                <Text style={styles.tryOnTitle} numberOfLines={1}>{item.garmentDesc}</Text>
-                <Text style={styles.tryOnBrand}>{item.brand.toUpperCase()}</Text>
+                <Text style={styles.tryOnTitle} numberOfLines={1}>{item.garmentDesc || 'Fashion Look'}</Text>
+                <Text style={styles.tryOnBrand}>{(item.brand || '').toUpperCase()}</Text>
               </View>
             </View>
             <LinearGradient colors={['#C4785A', '#E8A882']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.tryOnBtn}>
@@ -315,12 +350,17 @@ export default function Community() {
           data={feed}
           renderItem={renderReelItem}
           keyExtractor={i => i.id}
-          pagingEnabled
+          pagingEnabled={false}
           showsVerticalScrollIndicator={false}
           decelerationRate="fast"
           snapToInterval={H}
-          snapToAlignment="center"
-          contentContainerStyle={{ height: H * feed.length }}
+          snapToAlignment="start"
+          disableIntervalMomentum={true}
+          removeClippedSubviews={true}
+          initialNumToRender={2}
+          maxToRenderPerBatch={2}
+          windowSize={3}
+          getItemLayout={(_, index) => ({ length: H, offset: H * index, index })}
         />
       )}
 

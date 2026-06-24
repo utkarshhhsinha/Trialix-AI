@@ -26,11 +26,17 @@ const SwipeDeck = forwardRef(({
   onSwipeUp,
   stackSize = 3,
   overlayLabels = { right: '✨ TRY ON', left: '✕ SKIP', up: '📌 SAVE' },
+  cardVersion = 0,   // bump this to force top-card re-render when card data changes
 }, ref) => {
   const [topIndex, setTopIndex] = useState(0);
   const position = useRef(new Animated.ValueXY()).current;
   const hapticFired = useRef(false);
   const lastTap = useRef(0);
+  const swipeHistory = useRef([]);
+
+  useEffect(() => {
+    swipeHistory.current = [];
+  }, [cards]);
 
   // Stale closure fix: Store parameters in ref updated every render
   const stateRef = useRef({ topIndex, cards, onSwipeRight, onSwipeLeft, onSwipeUp });
@@ -42,6 +48,31 @@ const SwipeDeck = forwardRef(({
     swipeLeft: () => animateSwipe('left'),
     swipeRight: () => animateSwipe('right'),
     swipeUp: () => animateSwipe('up'),
+    undo: () => {
+      const { topIndex: curIdx, cards: currentCards } = stateRef.current;
+      if (curIdx > 0 && swipeHistory.current.length > 0) {
+        const prevIdx = curIdx - 1;
+        const lastDirection = swipeHistory.current.pop() || 'left';
+
+        // Position card far away in the direction it swiped off
+        const startX = lastDirection === 'right' ? W * 1.5 : lastDirection === 'left' ? -W * 1.5 : 0;
+        const startY = lastDirection === 'up' ? -H * 0.8 : 0;
+        position.setValue({ x: startX, y: startY });
+
+        setTopIndex(prevIdx);
+
+        // Animate back to center
+        Animated.spring(position, {
+          toValue: { x: 0, y: 0 },
+          friction: 6,
+          tension: 80,
+          useNativeDriver: true,
+        }).start();
+
+        return lastDirection;
+      }
+      return null;
+    }
   }));
 
   const pan = useRef(
@@ -108,6 +139,8 @@ const SwipeDeck = forwardRef(({
     }).start(() => {
       const nextIdx = curIdx + 1;
 
+      swipeHistory.current.push(direction);
+
       if (direction === 'right' && swipeRightCb) swipeRightCb(curIdx, currentCards[curIdx]);
       if (direction === 'left' && swipeLeftCb) swipeLeftCb(curIdx, currentCards[curIdx]);
       if (direction === 'up' && swipeUpCb) swipeUpCb(curIdx, currentCards[curIdx]);
@@ -143,7 +176,7 @@ const SwipeDeck = forwardRef(({
 
     visibleCards.push(
       <Animated.View
-        key={card.id || i}
+        key={`${card.id || i}_v${cardVersion}`}
         style={[styles.card, cardStyle]}
         {...(isTop ? pan.panHandlers : {})}
       >
@@ -187,8 +220,8 @@ const styles = StyleSheet.create({
   deck: { flex: 1 },
   card: {
     position: 'absolute',
-    left: 16, right: 16,
-    top: 0, bottom: 0,
+    left: 12, right: 12,
+    top: 8, bottom: 168,
   },
 
   // ── Overlays

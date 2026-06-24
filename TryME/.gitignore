@@ -67,3 +67,7 @@ screen.png
 # scratch / debug test files (often contain hardcoded API keys — NEVER commit)
 scratch/
 functions/test_*.js
+
+# Temporary and duplicate files
+node_modules 2/
+Untitled

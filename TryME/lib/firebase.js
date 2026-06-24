@@ -92,7 +92,7 @@ if (__DEV__) {
   }
 }
 
-export const uploadBase64Image = async (base64Data, path = 'generations') => {
+export const uploadBase64Image = async (base64Data, path = 'generations', customFilename = null) => {
   const FileSystem = require('expo-file-system/legacy');
   const token = firebaseAuth?.currentUser ? await firebaseAuth.currentUser.getIdToken() : '';
   const bucketName = firebaseConfig.storageBucket || "aura-ai-powered-fashion-aura.firebasestorage.app";
@@ -108,7 +108,8 @@ export const uploadBase64Image = async (base64Data, path = 'generations') => {
   const tempUri = `${FileSystem.cacheDirectory}temp_upload_${Date.now()}.jpg`;
   await FileSystem.writeAsStringAsync(tempUri, b64, { encoding: 'base64' });
   
-  const uploadPath = `${path}/${Date.now()}_${Math.random().toString(36).substring(7)}.jpg`;
+  const filename = customFilename || `${Date.now()}_${Math.random().toString(36).substring(7)}.jpg`;
+  const uploadPath = `${path}/${filename}`;
   const encodedPath = encodeURIComponent(uploadPath);
   
   const headers = {

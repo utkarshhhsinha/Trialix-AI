@@ -166,7 +166,7 @@ export default function Profile() {
 
         let uploadedUrl = '';
         try {
-          uploadedUrl = await uploadBase64Image(photoUrl, 'base-photos');
+          uploadedUrl = await uploadBase64Image(photoUrl, 'base-photos', `${user.uid}.jpg`);
         } catch (storageErr) {
           console.warn('Storage upload failed, trying base64 fallback in Firestore:', storageErr.message);
           if (photoUrl.length <= 1048487) {
@@ -217,7 +217,7 @@ export default function Profile() {
         const base64 = await FileSystem.readAsStringAsync(imageUri, { encoding: 'base64' });
         const dataUrl = `data:image/jpeg;base64,${base64}`;
         try {
-          photoUrl = await uploadBase64Image(dataUrl, 'base-photos');
+          photoUrl = await uploadBase64Image(dataUrl, 'base-photos', `${firebaseAuth.currentUser.uid}.jpg`);
         } catch (storageErr) {
           console.warn('Storage upload failed, trying base64 fallback in Firestore:', storageErr.message);
           if (dataUrl.length <= 1048487) {

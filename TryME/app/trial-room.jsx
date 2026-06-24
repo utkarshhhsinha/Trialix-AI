@@ -26,33 +26,33 @@ const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
 const GARMENTS = [
   {
     id: 'g1',
-    label: 'Snitch Light Blue Checkered',
-    image: require('@/assets/images/shirt1.png'),
-    buyLink: 'https://dl.flipkart.com/dl/snitch-men-checkered-casual-light-blue-shirt/p/itmfcd5f13009078?pid=SHTH2GGFJTDAVXVA&lid=LSTSHTH2GGFJTDAVXVAQJJ1BX&marketplace=FLIPKART&q=snitch&store=search.flipkart.com&srno=s_1_12&otracker=search&otracker1=search&fm=Search&iid=3d114e53-f9a7-4f2b-a90a-9e92b2e710ef.SHTH2GGFJTDAVXVA.SEARCH&ppt=sp&ppn=sp&ssid=0ar3bnxa2f9cmtq81780041334638&qH=4b726d6ef0a22c1e&ov_redirect=true&_refId=&_appId=CL',
+    label: 'Solid Casual White Shirt',
+    image: require('@/Clothes/Men/shirts_men/1.png'),
+    buyLink: 'https://www.flipkart.com/rare-rabbit-men-solid-casual-white-shirt/p/itmbdde6a7e14889?pid=SHTHMAQXCGZTYZZD',
   },
   {
     id: 'g2',
-    label: 'Snitch Black Striped',
-    image: require('@/assets/images/shirt2.png'),
-    buyLink: 'https://dl.flipkart.com/dl/snitch-men-striped-casual-black-shirt/p/itm4c2fe9b0d041e?pid=SHTGSZGJMYFT67TQ&lid=LSTSHTGSZGJMYFT67TQFDJRVN&marketplace=FLIPKART&q=snitch&store=search.flipkart.com&srno=s_1_13&otracker=search&otracker1=search&fm=Search&iid=3d114e53-f9a7-4f2b-a90a-9e92b2e710ef.SHTGSZGJMYFT67TQ.SEARCH&ppt=sp&ppn=sp&qH=4b726d6ef0a22c1e&ov_redirect=true&_refId=&_appId=CL',
+    label: 'Solid Casual Dark Blue Shirt',
+    image: require('@/Clothes/Men/shirts_men/2.png'),
+    buyLink: 'https://www.flipkart.com/rare-rabbit-men-solid-casual-dark-blue-shirt/p/itm32007d67b122c?pid=SHTHMAQXB7FTEFBR',
   },
   {
     id: 'g3',
-    label: 'Rare Rabbit Purple Printed',
-    image: require('@/assets/images/shirt3.png'),
-    buyLink: 'https://dl.flipkart.com/dl/rare-rabbit-men-printed-casual-purple-shirt/p/itmdc35d454c2b5f?pid=SHTGT6ENXB4DNJ37&lid=LSTSHTGT6ENXB4DNJ37KVHZ3R&hl_lid=&marketplace=FLIPKART&fm=eyJ3dHAiOiJyZWNvIiwicHJwdCI6InBwIiwibWlkIjoicHJvZHVjdFJlY29tbWVuZGF0aW9uL3NpbWlsYXIifQ==&_refId=&_appId=CL',
+    label: 'Solid Casual Blue Shirt',
+    image: require('@/Clothes/Men/shirts_men/3.png'),
+    buyLink: 'https://www.flipkart.com/rare-rabbit-men-solid-casual-blue-shirt/p/itm84adf30bb6235?pid=SHTHMAQX28HXGWMH',
   },
   {
     id: 'g4',
-    label: 'Snitch Maroon Solid',
-    image: require('@/assets/images/shirt4.png'),
-    buyLink: 'https://dl.flipkart.com/dl/snitch-men-solid-casual-maroon-shirt/p/itm58933d5d0f11d?pid=SHTGWYZRF2JQRTJR&lid=LSTSHTGWYZRF2JQRTJRW6RFCW&hl_lid=&marketplace=FLIPKART&fm=eyJ3dHAiOiJyZWNvIiwicHJwdCI6InBwIiwibWlkIjoicHJvZHVjdFJlY29tbWVuZGF0aW9uL2FzcGVjdFNpbWlsYXIifQ==&_refId=&_appId=CL',
+    label: 'Slim Fit Striped Casual Shirt',
+    image: require('@/Clothes/Men/shirts_men/4.png'),
+    buyLink: 'https://tigc.in/products/men-s-blue-slim-fit-striped-casual-shirt-0525-shstcs-02-02',
   },
   {
     id: 'g5',
-    label: 'Snitch Pink Solid',
-    image: require('@/assets/images/shirt5.png'),
-    buyLink: 'https://dl.flipkart.com/dl/snitch-men-solid-casual-pink-shirt/p/itm7cbb29a531fe3?pid=SHTGTMWYWBJ9FKMK&lid=LSTSHTGTMWYWBJ9FKMK92POL0&hl_lid=&marketplace=FLIPKART&fm=eyJ3dHAiOiJyZWNvIiwicHJwdCI6InBwIiwibWlkIjoicHJvZHVjdFJlY29tbWVuZGF0aW9uL2FzcGVjdFNpbWlsYXIifQ==&_refId=&_appId=CL',
+    label: 'Blue Striped Slim Fit Shirt',
+    image: require('@/Clothes/Men/shirts_men/5.png'),
+    buyLink: 'https://tigc.in/products/mens-blue-striped-slim-fit-shirt-0824-shstyd-06-02-blue',
   },
 ];
 
@@ -278,7 +278,7 @@ export default function TrialRoom() {
           {processing ? (
             <Animated.View style={[styles.resultInner, { transform: [{ scale: pulseAnim }] }]}>
               <Image
-                source={productImageUrl ? { uri: productImageUrl } : require('../assets/images/shirt1.png')}
+                source={productImageUrl ? { uri: productImageUrl } : require('../Clothes/Men/shirts_men/1.png')}
                 style={styles.resultImage}
                 resizeMode="cover"
               />
@@ -291,7 +291,7 @@ export default function TrialRoom() {
           ) : (
             <Animated.View style={[styles.resultInner, { opacity: fadeAnim }]}>
               <Image
-                source={resultUrl ? { uri: resultUrl } : require('../assets/images/shirt1.png')}
+                source={resultUrl ? { uri: resultUrl } : require('../Clothes/Men/shirts_men/1.png')}
                 style={styles.resultImage}
                 resizeMode="cover"
               />
@@ -353,7 +353,7 @@ export default function TrialRoom() {
           {/* ── Card 0: the product the user is currently trying */}
           <View style={styles.garmentCard}>
             <Image
-              source={productImageUrl ? { uri: productImageUrl } : require('../assets/images/shirt1.png')}
+              source={productImageUrl ? { uri: productImageUrl } : require('../Clothes/Men/shirts_men/1.png')}
               style={styles.garmentImage}
               resizeMode="cover"
             />

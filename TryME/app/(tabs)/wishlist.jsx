@@ -1,59 +1,97 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 import {
   View, Text, StyleSheet, FlatList, Pressable, Image,
-  ActivityIndicator, Alert, Platform, Linking,
+  ActivityIndicator, Alert, Platform, Linking, InteractionManager,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { onAuthStateChanged } from 'firebase/auth';
-import { collection, query, where, getDocs, deleteDoc, doc } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, deleteDoc, doc, orderBy } from 'firebase/firestore';
 import { firebaseAuth, firestore } from '../../lib/firebase';
 import { theme } from '../../constants/theme';
 import { StatusBar } from 'expo-status-bar';
 import Icon from '../../assets/icons';
 import { LinearGradient } from 'expo-linear-gradient';
 
+const resolveImageSource = (source) => {
+  if (!source) return null;
+  if (typeof source === 'number') return source;
+  if (typeof source === 'string') {
+    if (source.startsWith('http') || source.startsWith('data:') || source.startsWith('file://')) {
+      return { uri: source };
+    }
+    const num = Number(source);
+    if (!isNaN(num) && source.trim() !== '') {
+      return num;
+    }
+  }
+  if (typeof source === 'object' && source.uri) {
+    return source;
+  }
+  return null;
+};
+
 export default function Wishlist() {
   const router = useRouter();
   const [user, setUser] = useState(null);
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
+  const unsubRef = useRef(null);
 
+  // Observe auth state
   useEffect(() => {
     if (!firebaseAuth) return;
-    const unsub = onAuthStateChanged(firebaseAuth, async (u) => {
+    const unsub = onAuthStateChanged(firebaseAuth, (u) => {
       if (!u) { router.replace('/login'); return; }
       setUser(u);
-      await loadWishlist(u.uid);
     });
     return () => unsub();
   }, []);
 
-  const loadWishlist = async (uid) => {
-    try {
-      const q = query(collection(firestore, 'wishlist'), where('userId', '==', uid));
-      const snap = await getDocs(q);
-      const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      // Most recent first
-      data.sort((a, b) => {
-        const ta = a.createdAt?.seconds || 0;
-        const tb = b.createdAt?.seconds || 0;
-        return tb - ta;
-      });
-      setItems(data);
-    } catch (e) {
-      console.log('Wishlist load error:', e);
-    } finally {
-      setLoading(false);
-    }
-  };
+  // Real-time wishlist subscription — deferred until tab transition completes
+  useEffect(() => {
+    if (unsubRef.current) { unsubRef.current(); unsubRef.current = null; }
+    if (!user || !firestore) { setLoading(false); return; }
+
+    setLoading(true);
+
+    // Defer Firestore subscription until navigation animation is done
+    // This prevents the tab from freezing during transition
+    const task = InteractionManager.runAfterInteractions(() => {
+      const q = query(
+        collection(firestore, 'wishlist'),
+        where('userId', '==', user.uid),
+        orderBy('createdAt', 'desc')
+      );
+
+      unsubRef.current = onSnapshot(
+        q,
+        { includeMetadataChanges: false },
+        (snap) => {
+          const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+          setItems(data);
+          setLoading(false);
+        },
+        (err) => {
+          console.warn('[wishlist]', err.code, err.message);
+          setLoading(false);
+        }
+      );
+    });
+
+    return () => {
+      task.cancel();
+      if (unsubRef.current) { unsubRef.current(); unsubRef.current = null; }
+    };
+  }, [user]);
 
   const removeItem = async (itemId) => {
     Alert.alert('Remove from Wishlist', 'Remove this item?', [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Remove', style: 'destructive', onPress: async () => {
-          await deleteDoc(doc(firestore, 'wishlist', itemId));
+          // Optimistic update
           setItems(prev => prev.filter(i => i.id !== itemId));
+          await deleteDoc(doc(firestore, 'wishlist', itemId));
         },
       },
     ]);
@@ -67,29 +105,37 @@ export default function Wishlist() {
     Linking.openURL(link).catch(() => Alert.alert('Cannot open link'));
   };
 
-  const renderItem = ({ item }) => (
-    <View style={styles.card}>
-      {/* Image area */}
-      <View style={styles.cardImgWrap}>
-        <Image
-          source={{ uri: item.tryOnImageUrl || item.productImageUrl }}
-          style={styles.cardImg}
-          resizeMode="cover"
-        />
-        <LinearGradient
-          colors={['transparent', 'rgba(0,0,0,0.6)']}
-          style={styles.cardImgGradient}
-        />
-        {item.tryOnImageUrl && (
-          <View style={styles.aiBadge}>
-            <Text style={styles.aiBadgeText}>✨ Trialix AI</Text>
-          </View>
-        )}
-        {/* Small product thumbnail in corner if try-on exists */}
-        {item.tryOnImageUrl && item.productImageUrl && (
-          <Image source={{ uri: item.productImageUrl }} style={styles.productThumb} />
-        )}
-      </View>
+  const renderItem = ({ item }) => {
+    const mainSrc = resolveImageSource(item.tryOnImageUrl || item.productImageUrl);
+    const thumbSrc = resolveImageSource(item.productImageUrl);
+
+    return (
+      <View style={styles.card}>
+        {/* Image area */}
+        <View style={styles.cardImgWrap}>
+          {mainSrc ? (
+            <Image
+              source={mainSrc}
+              style={styles.cardImg}
+              resizeMode="cover"
+            />
+          ) : (
+            <View style={[styles.cardImg, { backgroundColor: '#EDE0D4' }]} />
+          )}
+          <LinearGradient
+            colors={['transparent', 'rgba(0,0,0,0.6)']}
+            style={styles.cardImgGradient}
+          />
+          {item.tryOnImageUrl && (
+            <View style={styles.aiBadge}>
+              <Text style={styles.aiBadgeText}>✨ Trialix AI</Text>
+            </View>
+          )}
+          {/* Small product thumbnail in corner if try-on exists and is different */}
+          {item.tryOnImageUrl && item.productImageUrl && item.tryOnImageUrl !== item.productImageUrl && thumbSrc && (
+            <Image source={thumbSrc} style={styles.productThumb} />
+          )}
+        </View>
 
       {/* Info area */}
       <View style={styles.cardInfo}>
@@ -112,6 +158,7 @@ export default function Wishlist() {
       </View>
     </View>
   );
+};
 
   return (
     <View style={styles.container}>
@@ -153,6 +200,10 @@ export default function Wishlist() {
           columnWrapperStyle={styles.row}
           contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}
+          removeClippedSubviews={true}
+          initialNumToRender={4}
+          maxToRenderPerBatch={4}
+          windowSize={5}
         />
       )}
     </View>
