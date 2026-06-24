@@ -78,7 +78,14 @@ exports.generateDailyPicks = onCall({ cors: true, invoker: "public", timeoutSeco
     const now = Date.now();
     const nextBatchAt = data.nextBatchAt?.toMillis?.() || 0;
     if (data.status === 'ready' && data.picks?.length > 0 && now < nextBatchAt) {
-      return { status: 'cached' };
+      // If the user uploaded a new base photo, skip the cache and regenerate
+      const incomingPhoto = (request.data?.basePhotoUrl || '').split('&t=')[0];
+      const storedPhoto = (data.basePhotoUrl || '').split('&t=')[0];
+      const photoChanged = incomingPhoto && storedPhoto && incomingPhoto !== storedPhoto;
+      if (!photoChanged) {
+        return { status: 'cached' };
+      }
+      logger.log(`[generateDailyPicks] Base photo changed — bypassing cache and regenerating for uid=${uid}`);
     }
     // Already generating — don't double-trigger
     if (data.status === 'generating' && now < (data.startedAt?.toMillis?.() || 0) + 300000) {
@@ -141,6 +148,7 @@ exports.generateDailyPicks = onCall({ cors: true, invoker: "public", timeoutSeco
     picks: placeholderPicks,
     startedAt: admin.firestore.FieldValue.serverTimestamp(),
     nextBatchAt: admin.firestore.Timestamp.fromMillis(nextBatchAt),
+    basePhotoUrl: humanPhotoUrl,  // stored so future calls can detect photo changes
     uid,
   });
 

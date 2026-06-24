@@ -199,7 +199,7 @@ export default function ProfileSetup() {
       }
 
       if (successRes) {
-        return `https://firebasestorage.googleapis.com/v0/b/${finalBucket}/o/${finalPath}?alt=media`;
+        return `https://firebasestorage.googleapis.com/v0/b/${finalBucket}/o/${finalPath}?alt=media&t=${Date.now()}`;
       }
 
       throw new Error('Failed to upload photo to Firebase Storage. Please check your internet connection.');

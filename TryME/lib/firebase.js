@@ -163,7 +163,7 @@ export const uploadBase64Image = async (base64Data, path = 'generations', custom
   await FileSystem.deleteAsync(tempUri, { idempotent: true }).catch(() => {});
   
   if (uploadRes && uploadRes.status === 200) {
-    const downloadUrl = `https://firebasestorage.googleapis.com/v0/b/${activeBucket}/o/${encodedPath}?alt=media`;
+    const downloadUrl = `https://firebasestorage.googleapis.com/v0/b/${activeBucket}/o/${encodedPath}?alt=media&t=${Date.now()}`;
     console.log('[Firebase REST] SUCCESS! Download URL:', downloadUrl);
     return downloadUrl;
   } else {

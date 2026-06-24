@@ -101,6 +101,7 @@ export default function DiscoverScreen() {
   const generatingRef = useRef(false);
   const countdownRef = useRef(null);
   const wishlistDocIdsRef = useRef([]);
+  const prevBasePhotoRef = useRef(null); // tracks last seen basePhotoUrl to detect changes
 
   const [user, setUser] = useState(null);
   const [profile, setProfile] = useState(null);
@@ -122,10 +123,28 @@ export default function DiscoverScreen() {
     if (!user || !firestore) return;
     return onSnapshot(doc(firestore, 'profiles', user.uid), snap => {
       if (snap.exists()) {
-        setProfile(snap.data());
+        const data = snap.data();
+        const newPhoto = (data.basePhotoUrl || '').split('&t=')[0];
+        const prevPhoto = (prevBasePhotoRef.current || '').split('&t=')[0];
+        const photoJustChanged = prevBasePhotoRef.current !== null && newPhoto && prevPhoto && newPhoto !== prevPhoto;
+
+        prevBasePhotoRef.current = data.basePhotoUrl || '';
+        setProfile(data);
         setStatus(prev => prev === 'loading'
-          ? (snap.data().basePhotoUrl ? 'ready' : 'no-photo')
+          ? (data.basePhotoUrl ? 'ready' : 'no-photo')
           : prev);
+
+        // Base photo changed — wipe old picks and force fresh generation
+        if (photoJustChanged) {
+          console.log('[discover] Base photo changed — clearing picks and forcing regeneration');
+          setPicks([]);
+          setSwipedCount(0);
+          setDeckKey(k => k + 1);
+          setShowDoneModal(false);
+          setNextBatchAt(null);
+          setStatus('ready');
+          generatingRef.current = false;
+        }
       }
     });
   }, [user]);

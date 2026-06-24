@@ -140,7 +140,7 @@ export default function Onboarding() {
         throw new Error("Failed to upload base photo to Firebase Storage. Please check your internet connection.");
       }
 
-      const basePhotoUrl = `https://firebasestorage.googleapis.com/v0/b/${finalBucket}/o/${finalPath}?alt=media`;
+      const basePhotoUrl = `https://firebasestorage.googleapis.com/v0/b/${finalBucket}/o/${finalPath}?alt=media&t=${Date.now()}`;
       console.log('Onboarding photo uploaded successfully! URL:', basePhotoUrl);
 
       const profileRef = doc(firestore, 'profiles', user.uid);

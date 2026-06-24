@@ -10,6 +10,7 @@ export default function RootLayout() {
       <Stack.Screen name="profile-setup" />
       <Stack.Screen name="(tabs)" />
       <Stack.Screen name="trial-room" options={{ animation: 'slide_from_bottom', presentation: 'modal' }} />
+      <Stack.Screen name="custom-tryon" options={{ animation: 'slide_from_bottom', presentation: 'modal' }} />
     </Stack>
   );
 }

@@ -516,21 +516,21 @@ export default function Profile() {
           )}
         </View>
 
-        {/* ── SETTINGS AND ACCOUNT SYSTEM */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Account Options</Text>
           <View style={styles.actionsCard}>
             {[
+              { ionicon: 'sparkles-outline', label: 'Generate Custom Try-On', onPress: () => router.push('/custom-tryon') },
               { ionicon: 'camera-outline', label: 'Upload Try-On Photo', onPress: pickAndUpdateBasePhoto },
-              { ionicon: 'sparkles-outline', label: 'Recalibrate AI Twin', onPress: pickAndUpdateBasePhoto },
+              { ionicon: 'color-wand-outline', label: 'Recalibrate AI Twin', onPress: pickAndUpdateBasePhoto },
               { ionicon: 'options-outline', label: 'Style Preferences', onPress: handleStylePreferences },
               { ionicon: 'share-social-outline', label: 'Share Profile Link', onPress: handleShareProfile },
             ].map((a, i) => (
-              <Pressable key={a.label} style={[styles.actionRow, i === 3 && styles.actionRowLast]} onPress={a.onPress}>
-                <View style={styles.actionIconCircle}>
-                  <Ionicons name={a.ionicon} size={16} color="#7A6055" />
+              <Pressable key={a.label} style={[styles.actionRow, i === 4 && styles.actionRowLast]} onPress={a.onPress}>
+                <View style={[styles.actionIconCircle, i === 0 && styles.actionIconCirclePrimary]}>
+                  <Ionicons name={a.ionicon} size={16} color={i === 0 ? '#C4785A' : '#7A6055'} />
                 </View>
-                <Text style={styles.actionText}>{a.label}</Text>
+                <Text style={[styles.actionText, i === 0 && styles.actionTextPrimary]}>{a.label}</Text>
                 <Ionicons name="chevron-forward" size={16} color="#B8A49A" />
               </Pressable>
             ))}
@@ -786,6 +786,9 @@ const styles = StyleSheet.create({
     width: 32, height: 32, borderRadius: 16,
     backgroundColor: '#F5EDE4', alignItems: 'center', justifyContent: 'center',
   },
+  actionIconCirclePrimary: {
+    backgroundColor: '#FDE8DC',
+  },
   actionRow: {
     flexDirection: 'row', alignItems: 'center', gap: 12,
     paddingHorizontal: 16, paddingVertical: 12,
@@ -793,6 +796,7 @@ const styles = StyleSheet.create({
   },
   actionRowLast: { borderBottomWidth: 0 },
   actionText: { flex: 1, fontSize: 14, fontWeight: '700', color: '#2A1F1A' },
+  actionTextPrimary: { color: '#C4785A' },
 
   // Sign out
   signOutBtn: {
