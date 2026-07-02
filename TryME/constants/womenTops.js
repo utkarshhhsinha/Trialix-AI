@@ -19,6 +19,8 @@ export const WOMEN_TOPS = [
     category: 'upper_body',
     gender: 'female',
     image: require('@/Clothes/Women/Tops/top1.png'),
+    tryOnImage: require('@/Clothes/Women/Tops/tryon_top1.png'),
+    tryOnImageUrl: 'https://aura-ai-powered-fashion-aura.web.app/clothes/women/tryon_top1.png',
     buyLink:
       'https://rainandrainbow.com/products/green-floral-printed-sleeveless-peplum-pure-cotton-top?variant=50380853510447&country=IN&currency=INR',
     imageUrl: 'https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?w=600&q=80',
@@ -31,6 +33,8 @@ export const WOMEN_TOPS = [
     category: 'dresses',
     gender: 'female',
     image: require('@/Clothes/Women/Tops/top2.png'),
+    tryOnImage: require('@/Clothes/Women/Tops/tryon_top2.png'),
+    tryOnImageUrl: 'https://aura-ai-powered-fashion-aura.web.app/clothes/women/tryon_purple_dress.png',
     buyLink:
       'https://www.limeroad.com/purple-dress-tokyo-talkies-p22470795?imgIdx=0&src_id=merge_feed_story__3&reference_story_id=69f9cac2c95a470722a438c1',
     imageUrl: 'https://images.unsplash.com/photo-1496747611176-843222e1e57c?w=600&q=80',
@@ -43,6 +47,8 @@ export const WOMEN_TOPS = [
     category: 'upper_body',
     gender: 'female',
     image: require('@/Clothes/Women/Tops/top3.png'),
+    tryOnImage: require('@/Clothes/Women/Tops/tryon_top3.png'),
+    tryOnImageUrl: 'https://aura-ai-powered-fashion-aura.web.app/clothes/women/tryon_top3.png',
     buyLink:
       'https://evara.me/products/marham-bell-sleeves-kurti?variant=46413089046699&country=IN&currency=INR',
     imageUrl: 'https://images.unsplash.com/photo-1583743814966-8936f5b7be1a?w=600&q=80',
@@ -55,6 +61,8 @@ export const WOMEN_TOPS = [
     category: 'upper_body',
     gender: 'female',
     image: require('@/Clothes/Women/Tops/top4.png'),
+    tryOnImage: require('@/Clothes/Women/Tops/tryon_top4.png'),
+    tryOnImageUrl: 'https://aura-ai-powered-fashion-aura.web.app/clothes/women/tryon_pink_kurta.png',
     buyLink:
       'https://shanaya.in/Pastel-Pink-Georgette-Chikankari-Embroidery-Kurta-With-Pant--/catalogue/e0jmeHw3/BEwXaj2Y',
     imageUrl: 'https://images.unsplash.com/photo-1594938298603-c8148c4b4d29?w=600&q=80',
@@ -67,6 +75,8 @@ export const WOMEN_TOPS = [
     category: 'upper_body',
     gender: 'female',
     image: require('@/Clothes/Women/Tops/top5.png'),
+    tryOnImage: require('@/Clothes/Women/Tops/tryon_top5.png'),
+    tryOnImageUrl: 'https://aura-ai-powered-fashion-aura.web.app/clothes/women/tryon_top5.png',
     buyLink:
       'https://vastrakaala.com/products/cream-floral-printed-kurta-set-with-matching-dupatta-copy?currency=INR&country=IN&variant=51707841675583',
     imageUrl: 'https://images.unsplash.com/photo-1591047139829-d91aecb6caea?w=600&q=80',
@@ -79,6 +89,8 @@ export const WOMEN_TOPS = [
     category: 'upper_body',
     gender: 'female',
     image: require('@/Clothes/Women/Tops/top6.png'),
+    tryOnImage: require('@/Clothes/Women/Tops/tryon_top6.png'),
+    tryOnImageUrl: 'https://aura-ai-powered-fashion-aura.web.app/clothes/women/tryon_top6.png',
     buyLink:
       'https://rainandrainbow.com/products/women-green-floral-printed-pure-cotton-empire-tops?variant=49987890512175&country=IN&currency=INR',
     imageUrl: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=600&q=80',
@@ -91,9 +103,11 @@ export const WOMEN_TOPS = [
     category: 'upper_body',
     gender: 'female',
     image: require('@/Clothes/Women/Tops/top7.png'),
+    tryOnImage: require('@/Clothes/Women/Tops/tryon_top7.png'),
+    tryOnImageUrl: 'https://aura-ai-powered-fashion-aura.web.app/clothes/women/tryon_top7.png',
     buyLink:
       'https://www.bullionknot.com/products/poshak-mal-cotton-white-kurta-set?variant=44980776698032&country=IN&currency=INR',
-    imageUrl: 'https://images.unsplash.com/photo-1622445275576-721325763afe?w=600&q=80',
+    imageUrl: 'https://images.unsplash.com/photo-1583743814966-8936f5b7be1a?w=600&q=80',
   },
   {
     id: 'wt8',
@@ -103,6 +117,8 @@ export const WOMEN_TOPS = [
     category: 'upper_body',
     gender: 'female',
     image: require('@/Clothes/Women/Tops/top8.png'),
+    tryOnImage: require('@/Clothes/Women/Tops/tryon_top8.png'),
+    tryOnImageUrl: 'https://aura-ai-powered-fashion-aura.web.app/clothes/women/tryon_ivory_kurti.png',
     buyLink:
       'https://jaipurkurta.com/products/grace-in-ivory-minimalist-elegance-kurti-set?variant=43579451048029&country=IN&currency=INR',
     imageUrl: 'https://images.unsplash.com/photo-1574164904299-3a102b110380?w=600&q=80',
@@ -115,6 +131,8 @@ export const WOMEN_TOPS = [
     category: 'upper_body',
     gender: 'female',
     image: require('@/Clothes/Women/Tops/top9.png'),
+    tryOnImage: require('@/Clothes/Women/Tops/tryon_top9.png'),
+    tryOnImageUrl: 'https://aura-ai-powered-fashion-aura.web.app/clothes/women/tryon_ivory_kurti.png',
     buyLink:
       'https://jaipurkurta.com/products/grace-in-ivory-minimalist-elegance-kurti-set?variant=43579451048029&country=IN&currency=INR',
     imageUrl: 'https://images.unsplash.com/photo-1556821840-3a63f95609a7?w=600&q=80',
@@ -235,8 +253,10 @@ export const WOMEN_TOPS = [
     priceINR: '949',
     category: 'upper_body',
     gender: 'female',
-    // Using 1sttop.jpg since there is no top20.png in assets
-    image: require('@/Clothes/Women/Tops/1sttop.jpg'),
+    // Using top1.png as asset fallback
+    image: require('@/Clothes/Women/Tops/top1.png'),
+    tryOnImage: require('@/Clothes/Women/Tops/tryon_top1.png'),
+    tryOnImageUrl: 'https://aura-ai-powered-fashion-aura.web.app/clothes/women/tryon_top1.png',
     buyLink:
       'https://www.savana.com/details/gathered-top-1801422?utm_source=Free&utm_medium=ItemShare&utm_campaign=Whatsapp&ub_cl=in_en-IN&vid=3&skcPGs=307652-406989',
     imageUrl: 'https://images.unsplash.com/photo-1595777457583-95e059d581b8?w=600&q=80',

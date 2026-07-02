@@ -4,38 +4,40 @@ const admin = require("firebase-admin");
 
 if (!admin.apps.length) admin.initializeApp();
 
-// ── Garment catalog (server-side copy — only imageUrl needed)
+// ── Garment catalog (server-side copy)
 const GARMENT_CATALOG = [
-  { id: 'm1', title: 'Classic Oxford Shirt', brand: 'Zara Man', priceINR: '3,299', category: 'upper_body', imageUrl: 'https://images.unsplash.com/photo-1626497764746-6dc36546b388?w=600&q=80', buyLink: 'https://www.zara.com/in/en/man-shirts-l737.html', gender: 'male' },
-  { id: 'm2', title: 'Denim Trucker Jacket', brand: "Levi's", priceINR: '8,299', category: 'upper_body', imageUrl: 'https://images.unsplash.com/photo-1611312449412-6cefac5dc3e4?w=600&q=80', buyLink: 'https://www.levi.com/IN/en_IN/', gender: 'male' },
-  { id: 'm3', title: 'Slim-Fit Blazer', brand: 'H&M Man', priceINR: '6,599', category: 'upper_body', imageUrl: 'https://images.unsplash.com/photo-1607345366928-199ea26cfe3e?w=600&q=80', buyLink: 'https://www2.hm.com/en_in/men.html', gender: 'male' },
-  { id: 'm5', title: 'Graphic Oversized Tee', brand: 'Myntra Studio', priceINR: '1,299', category: 'upper_body', imageUrl: 'https://images.unsplash.com/photo-1596755094514-f87e34085b2c?w=600&q=80', buyLink: 'https://www.myntra.com/t-shirts', gender: 'male' },
-  { id: 'm6', title: 'Striped Linen Shirt', brand: 'Fabindia', priceINR: '2,499', category: 'upper_body', imageUrl: 'https://images.unsplash.com/photo-1598033129183-c4f50c736f10?w=600&q=80', buyLink: 'https://www.fabindia.com/men-clothing', gender: 'male' },
+  { id: 'm1', title: 'Striped Formal Blue Shirt', brand: 'Arrow', priceINR: '2,299', category: 'upper_body', imageUrl: '/clothes/men/shirt_1.png', buyLink: 'https://dl.flipkart.com/dl/arrow-men-striped-formal-blue-shirt/p/itm841d0f1b080b5?pid=SHTH562ZZZUASAP4&lid=LSTSHTH562ZZZUASAP4XLTBGG&marketplace=FLIPKART&q=mens+shirts&store=clo/ash/axc/mmk&srno=s_1_12&otracker=search&otracker1=search&fm=Search&iid=en_466mtm31ulngWMmNRkwpf7FcmIeupNYSfUeiDqpnoclC3cF0zRpFaMKm3VyhpzGv40n90zY78i1LOJzSslDuptWlIFuVM3oDZCWrybBVqWAeoRf8toT9hRh6WHXRxPML&ppt=sp&ppn=sp&ssid=hggjaf20t60q8glc1782995521394&qH=101e209a16ec881b&ov_redirect=true&_refId=&_appId=CL', gender: 'male' },
+  { id: 'm2', title: 'Solid Formal Green Shirt', brand: 'Arrow', priceINR: '2,499', category: 'upper_body', imageUrl: '/clothes/men/shirt_2.png', buyLink: 'https://dl.flipkart.com/dl/arrow-men-solid-formal-green-shirt/p/itm49fdde235c895?pid=SHTHE25FY4VZGHYP&lid=LSTSHTHE25FY4VZGHYPB02M3D&hl_lid=&marketplace=FLIPKART&fm=eyJ3dHAiOiJyZWNvIiwicHJwdCI6InBwIiwibWlkIjoicHJvZHVjdFJlY29tbWVuZGF0aW9uL3NpbWlsYXIifQ==&_refId=&_appId=CL', gender: 'male' },
+  { id: 'm3', title: 'Checkered Casual Blue Shirt', brand: 'The Souled Store', priceINR: '1,799', category: 'upper_body', imageUrl: '/clothes/men/shirt_3.png', buyLink: 'https://dl.flipkart.com/dl/souled-store-men-checkered-casual-blue-shirt/p/itm78b3ed96b53d9?pid=SHTHZBZAJWFVRZNZ&lid=LSTSHTHZBZAJWFVRZNZVTV7RO&marketplace=FLIPKART&q=shirts+for+men+&store=clo/ash/axc/mmk&srno=s_1_30&otracker=search&otracker1=search&fm=Search&iid=6a772444-5bb4-4c11-9f5c-a41c9dc862e0.SHTHZBZAJWFVRZNZ.SEARCH&ppt=sp&ppn=sp&ssid=kg8yapcxkx3kn37k1782995709428&qH=765b7aa0bb0beefa&ov_redirect=true&_refId=&_appId=CL', gender: 'male' },
+  { id: 'm4', title: 'Checkered Casual Light Blue Shirt', brand: 'The Souled Store', priceINR: '1,899', category: 'upper_body', imageUrl: '/clothes/men/shirt_4.png', buyLink: 'https://dl.flipkart.com/dl/souled-store-men-checkered-casual-light-blue-shirt/p/itmfcc5c00242042?pid=SHTHZD9UXMF9EDST&lid=LSTSHTHZD9UXMF9EDSTUCCHBJ&hl_lid=&marketplace=FLIPKART&fm=eyJ3dHAiOiJyZWNvIiwicHJwdCI6InBwIiwibWlkIjoicHJvZHVjdFJlY29tbWVuZGF0aW9uL3NpbWlsYXIifQ==&_refId=&_appId=CL', gender: 'male' },
+  { id: 'm5', title: 'Solid Casual Yellow Shirt', brand: 'U.S. Polo Assn.', priceINR: '2,199', category: 'upper_body', imageUrl: '/clothes/men/shirt_5.png', buyLink: 'https://dl.flipkart.com/dl/u-s-polo-assn-men-solid-casual-yellow-shirt/p/itmaf7964764f9ba?pid=SHTGJ5VZXQSNU8S8&lid=LSTSHTGJ5VZXQSNU8S8XTP2UD&marketplace=FLIPKART&q=shirts+for+men+&store=clo/ash/axc/mmk&srno=s_1_34&otracker=search&otracker1=search&fm=Search&iid=6a772444-5bb4-4c11-9f5c-a41c9dc862e0.SHTGJ5VZXQSNU8S8.SEARCH&ppt=sp&ppn=sp&ssid=kg8yapcxkx3kn37k1782995709428&qH=765b7aa0bb0beefa&ov_redirect=true&_refId=&_appId=CL', gender: 'male' },
+  { id: 'm6', title: 'Solid Casual Brown Shirt', brand: 'U.S. Polo Assn.', priceINR: '2,399', category: 'upper_body', imageUrl: '/clothes/men/shirt_6.png', buyLink: 'https://dl.flipkart.com/dl/u-s-polo-assn-men-solid-casual-brown-shirt/p/itm1f6a030ed9c9a?pid=SHTGKYXPSA85RSNF&lid=LSTSHTGKYXPSA85RSNFAC9KLN&hl_lid=&marketplace=FLIPKART&fm=eyJ3dHAiOiJyZWNvIiwicHJwdCI6InBwIiwibWlkIjoicHJvZHVjdFJlY29tbWVuZGF0aW9uL3NpbWlsYXIifQ==&_refId=&_appId=CL', gender: 'male' },
+  { id: 'm7', title: 'Solid Casual Dark Brown Shirt', brand: 'U.S. Polo Assn.', priceINR: '2,299', category: 'upper_body', imageUrl: '/clothes/men/shirt_7.png', buyLink: 'https://dl.flipkart.com/dl/u-s-polo-assn-men-solid-casual-brown-shirt/p/itm67929225562cb?pid=SHTHB4SVSKFGZFHF&lid=LSTSHTHB4SVSKFGZFHFV1PVEB&hl_lid=&marketplace=FLIPKART&fm=eyJ3dHAiOiJyZWNvIiwicHJwdCI6InBwIiwibWlkIjoicHJvZHVjdFJlY29tbWVuZGF0aW9uL3NpbWlsYXIifQ==&_refId=&_appId=CL', gender: 'male' },
+  { id: 'm8', title: 'Solid Casual Grey Shirt', brand: 'Rare Rabbit', priceINR: '2,799', category: 'upper_body', imageUrl: '/clothes/men/shirt_8.png', buyLink: 'https://dl.flipkart.com/dl/rare-rabbit-men-solid-casual-grey-shirt/p/itm3e5e30e57b349?pid=SHTHMAQXDHHWACTH&lid=LSTSHTHMAQXDHHWACTHSWZCNY&marketplace=FLIPKART&q=mens+shirts&store=clo/ash/axc/mmk&srno=s_1_14&otracker=search&otracker1=search&fm=Search&iid=e14a92ff-9f0e-4e6a-a59d-5d6606b5dd55.SHTHMAQXDHHWACTH.SEARCH&ppt=sp&ppn=sp&qH=101e209a16ec881b&ov_redirect=true&_refId=&_appId=CL', gender: 'male' },
+  { id: 'm9', title: 'Printed Straight Kurta', brand: 'Manyavar', priceINR: '2,999', category: 'upper_body', imageUrl: '/clothes/men/kurta_1.png', buyLink: 'https://dl.flipkart.com/dl/diwas-manyavar-men-printed-straight-kurta/p/itm883654bbe887f?pid=KTAHDNT8BSQDRMVC&lid=LSTKTAHDNT8BSQDRMVCIIO428&marketplace=FLIPKART&q=kurta+for+men&store=clo/cfv/cib/jks&srno=s_1_2&otracker=search&otracker1=search&fm=Search&iid=en_xHLtr389GlnWxT9vw4NMbxxIg5TSMVU26XFPg3xpcwDxB71O03k2pPFQSs0NYTvlzEs5a-PumP3ZJhV5Sw7UBQUHLSogkPwwg2qEww12zCXSc0Eu70dQsgXqsS2tyvZF&ppt=sp&ppn=sp&ssid=23okcgagryybrabk1782995815480&qH=dca85cb44dee308e&ov_redirect=true&_refId=&_appId=CL', gender: 'male' },
+  { id: 'm10', title: 'Embroidered Straight Kurta', brand: 'House of Pataudi', priceINR: '3,299', category: 'upper_body', imageUrl: '/clothes/men/kurta_2.png', buyLink: 'https://dl.flipkart.com/dl/house-pataudi-men-embroidered-straight-kurta/p/itm76a08a10766d1?pid=KTAHNMGSGD4DYJEF&lid=LSTKTAHNMGSGD4DYJEF3EKT9B&marketplace=FLIPKART&q=kurta+for+men&store=clo/cfv/cib/jks&srno=s_1_9&otracker=search&otracker1=search&fm=Search&iid=03323654-4185-4b74-b8f7-306bfe7ddcd5.KTAHNMGSGD4DYJEF.SEARCH&ppt=sp&ppn=sp&qH=dca85cb44dee308e&ov_redirect=true&_refId=&_appId=CL', gender: 'male' },
+  { id: 'm11', title: 'Self-Design Straight Kurta', brand: 'Manyavar', priceINR: '3,199', category: 'upper_body', imageUrl: '/clothes/men/kurta_3.png', buyLink: 'https://dl.flipkart.com/dl/diwas-manyavar-men-self-design-straight-kurta/p/itmc54b52c9b1721?pid=KTAHANZPFJYYTE9V&lid=LSTKTAHANZPFJYYTE9VYBOLQI&marketplace=FLIPKART&q=kurta+for+men&store=clo/cfv/cib/jks&srno=s_1_11&otracker=search&otracker1=search&fm=Search&iid=en_xHLtr389GlnWxT9vw4NMbxxIg5TSMVU26XFPg3xpcwBuDizuya9tekWUbwn7hZAH-uVutICOGzKzjwACumUK7soV-NeA8mPUKz20_ob3cp9gMeWLCFkQTtmKQBqwABMr&ppt=sp&ppn=sp&qH=dca85cb44dee308e&ov_redirect=true&_refId=&_appId=CL', gender: 'male' },
+  { id: 'm12', title: 'Printed Straight Kurta', brand: 'House of Sanskruti', priceINR: '2,599', category: 'upper_body', imageUrl: '/clothes/men/kurta_4.png', buyLink: 'https://dl.flipkart.com/dl/house-sanskruti-men-printed-straight-kurta/p/itm2261d60a44fb4?pid=KTAHE6G3MW4NHWSJ&lid=LSTKTAHE6G3MW4NHWSJHDFSV9&marketplace=FLIPKART&q=kurta+for+men&store=clo/cfv/cib/jks&srno=s_1_25&otracker=search&otracker1=search&fm=Search&iid=03323654-4185-4b74-b8f7-306bfe7ddcd5.KTAHE6G3MW4NHWSJ.SEARCH&ppt=sp&ppn=sp&qH=dca85cb44dee308e&ov_redirect=true&_refId=&_appId=CL', gender: 'male' },
   // ── Women's tops (19 items)
-  { id: 'wt1', title: 'Green Floral Peplum Top', brand: 'Rain & Rainbow', priceINR: '699', category: 'upper_body', imageUrl: 'https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?w=600&q=80', buyLink: 'https://rainandrainbow.com/products/green-floral-printed-sleeveless-peplum-pure-cotton-top?variant=50380853510447&country=IN&currency=INR', gender: 'female' },
-  { id: 'wt2', title: 'Purple Dress', brand: 'Tokyo Talkies', priceINR: '999', category: 'dresses', imageUrl: 'https://images.unsplash.com/photo-1496747611176-843222e1e57c?w=600&q=80', buyLink: 'https://www.limeroad.com/purple-dress-tokyo-talkies-p22470795?imgIdx=0&src_id=merge_feed_story__3&reference_story_id=69f9cac2c95a470722a438c1', gender: 'female' },
-  { id: 'wt3', title: 'Marham Bell Sleeves Kurti', brand: 'Evara', priceINR: '1,299', category: 'upper_body', imageUrl: 'https://images.unsplash.com/photo-1583743814966-8936f5b7be1a?w=600&q=80', buyLink: 'https://evara.me/products/marham-bell-sleeves-kurti?variant=46413089046699&country=IN&currency=INR', gender: 'female' },
-  { id: 'wt4', title: 'Pastel Pink Chikankari Kurta', brand: 'Shanaya', priceINR: '1,499', category: 'upper_body', imageUrl: 'https://images.unsplash.com/photo-1594938298603-c8148c4b4d29?w=600&q=80', buyLink: 'https://shanaya.in/Pastel-Pink-Georgette-Chikankari-Embroidery-Kurta-With-Pant--/catalogue/e0jmeHw3/BEwXaj2Y', gender: 'female' },
-  { id: 'wt5', title: 'Cream Floral Kurta Set', brand: 'Vastrakaala', priceINR: '1,899', category: 'upper_body', imageUrl: 'https://images.unsplash.com/photo-1591047139829-d91aecb6caea?w=600&q=80', buyLink: 'https://vastrakaala.com/products/cream-floral-printed-kurta-set-with-matching-dupatta-copy?currency=INR&country=IN&variant=51707841675583', gender: 'female' },
-  { id: 'wt6', title: 'Green Floral Empire Top', brand: 'Rain & Rainbow', priceINR: '599', category: 'upper_body', imageUrl: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=600&q=80', buyLink: 'https://rainandrainbow.com/products/women-green-floral-printed-pure-cotton-empire-tops?variant=49987890512175&country=IN&currency=INR', gender: 'female' },
-  { id: 'wt7', title: 'Poshak Mal White Kurta Set', brand: 'Bullion Knot', priceINR: '2,199', category: 'upper_body', imageUrl: 'https://images.unsplash.com/photo-1622445275576-721325763afe?w=600&q=80', buyLink: 'https://www.bullionknot.com/products/poshak-mal-cotton-white-kurta-set?variant=44980776698032&country=IN&currency=INR', gender: 'female' },
-  { id: 'wt8', title: 'Grace in Ivory Kurti Set', brand: 'Jaipur Kurta', priceINR: '2,499', category: 'upper_body', imageUrl: 'https://images.unsplash.com/photo-1574164904299-3a102b110380?w=600&q=80', buyLink: 'https://jaipurkurta.com/products/grace-in-ivory-minimalist-elegance-kurti-set?variant=43579451048029&country=IN&currency=INR', gender: 'female' },
-  { id: 'wt9', title: 'Grace in Ivory Minimalist Kurti', brand: 'Jaipur Kurta', priceINR: '2,499', category: 'upper_body', imageUrl: 'https://images.unsplash.com/photo-1556821840-3a63f95609a7?w=600&q=80', buyLink: 'https://jaipurkurta.com/products/grace-in-ivory-minimalist-elegance-kurti-set?variant=43579451048029&country=IN&currency=INR', gender: 'female' },
-  { id: 'wt10', title: 'Animal Print Kurta with Palazzos', brand: 'Lookmark', priceINR: '1,599', category: 'upper_body', imageUrl: 'https://images.unsplash.com/photo-1509631179647-0177331693ae?w=600&q=80', buyLink: 'https://www.myntra.com/kurta-sets/lookmark/lookmark-women-animal-printed-regular-a-line-calf-length-kurta-with-palazzos/34018371/buy', gender: 'female' },
-  { id: 'wt11', title: 'Print Crop Top', brand: 'Moda Rapido', priceINR: '799', category: 'upper_body', imageUrl: 'https://images.unsplash.com/photo-1529139574466-a303027c1d8b?w=600&q=80', buyLink: 'https://www.myntra.com/tops/moda+rapido/moda-rapido-print-crop-top/42428516/buy', gender: 'female' },
-  { id: 'wt12', title: 'Bow Top', brand: 'Savana', priceINR: '1,099', category: 'upper_body', imageUrl: 'https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?w=600&q=80', buyLink: 'https://www.savana.com/details/bow-top-1781682?utm_source=Free&utm_medium=ItemShare&utm_campaign=Whatsapp&ub_cl=in_en-IN&vid=25&skcPGs=293870-393317', gender: 'female' },
-  { id: 'wt13', title: 'Placket Blouse', brand: 'Savana', priceINR: '999', category: 'upper_body', imageUrl: 'https://images.unsplash.com/photo-1488426862026-3ee34a7d66df?w=600&q=80', buyLink: 'https://www.savana.com/details/placket-blouse-2130912?utm_source=Free&utm_medium=ItemShare&utm_campaign=Whatsapp&ub_cl=in_en-IN&vid=2&skcPGs=350587-453870', gender: 'female' },
-  { id: 'wt14', title: 'Lace Trimmed Wrap Top', brand: 'Savana', priceINR: '1,199', category: 'upper_body', imageUrl: 'https://images.unsplash.com/photo-1583743814966-8936f5b7be1a?w=600&q=80', buyLink: 'https://www.savana.com/details/lace-trimmed-wrap-top-1987182?utm_source=Free&utm_medium=ItemShare&utm_campaign=Whatsapp&ub_cl=in_en-IN&vid=16&skcPGs=326547-433777', gender: 'female' },
-  { id: 'wt15', title: 'Asymmetric Top', brand: 'Savana', priceINR: '899', category: 'upper_body', imageUrl: 'https://images.unsplash.com/photo-1539109136881-3be0616acf4b?w=600&q=80', buyLink: 'https://www.savana.com/details/asymmetric-top-1998762?utm_source=Free&utm_medium=ItemShare&utm_campaign=Whatsapp&ub_cl=in_en-IN&skcPGs=328549-430305&vid=318', gender: 'female' },
-  { id: 'wt16', title: 'Draped Top', brand: 'Savana', priceINR: '849', category: 'upper_body', imageUrl: 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=600&q=80', buyLink: 'https://www.savana.com/details/draped-top-1602882?utm_source=Free&utm_medium=ItemShare&utm_campaign=Whatsapp&ub_cl=in_en-IN&vid=6&skcPGs=266174-413087', gender: 'female' },
-  { id: 'wt17', title: 'Draped Top (Alt)', brand: 'Savana', priceINR: '849', category: 'upper_body', imageUrl: 'https://images.unsplash.com/photo-1534274988757-a28bf1a57c17?w=600&q=80', buyLink: 'https://www.savana.com/details/draped-top-1602882?utm_source=Free&utm_medium=ItemShare&utm_campaign=Whatsapp&ub_cl=in_en-IN&vid=6&skcPGs=266174-413087', gender: 'female' },
-  { id: 'wt18', title: 'Sequin Embroidered Tank Top', brand: 'Savana', priceINR: '1,499', category: 'upper_body', imageUrl: 'https://images.unsplash.com/photo-1543163521-1bf539c55dd2?w=600&q=80', buyLink: 'https://www.savana.com/details/sequin-embroidered-tank-top-2096502?utm_source=Free&utm_medium=ItemShare&utm_campaign=Whatsapp&ub_cl=in_en-IN&skcPGs=367590-470053&vid=1', gender: 'female' },
-  { id: 'wt19', title: 'Gathered Top', brand: 'Savana', priceINR: '949', category: 'upper_body', imageUrl: 'https://images.unsplash.com/photo-1595777457583-95e059d581b8?w=600&q=80', buyLink: 'https://www.savana.com/details/gathered-top-1801422?utm_source=Free&utm_medium=ItemShare&utm_campaign=Whatsapp&ub_cl=in_en-IN&vid=3&skcPGs=307652-406989', gender: 'female' },
-  // ── Legacy female items
-  { id: 'f1', title: 'Floral Midi Dress', brand: 'H&M', priceINR: '4,199', category: 'dresses', imageUrl: 'https://images.unsplash.com/photo-1595777457583-95e059d581b8?w=600&q=80', buyLink: 'https://www2.hm.com/en_in/women/products/dresses.html', gender: 'female' },
-  { id: 'f2', title: 'Cropped Linen Blazer', brand: 'Zara', priceINR: '7,499', category: 'upper_body', imageUrl: 'https://images.unsplash.com/photo-1591047139829-d91aecb6caea?w=600&q=80', buyLink: 'https://www.zara.com/in/en/woman-blazers-l1045.html', gender: 'female' },
-  { id: 'f3', title: 'Cable Knit Sweater', brand: 'Everlane', priceINR: '6,499', category: 'upper_body', imageUrl: 'https://images.unsplash.com/photo-1574164904299-3a102b110380?w=600&q=80', buyLink: 'https://www.everlane.com/collections/womens-sweaters', gender: 'female' },
-  { id: 'f4', title: 'Satin Slip Dress', brand: 'ASOS', priceINR: '5,499', category: 'dresses', imageUrl: 'https://images.unsplash.com/photo-1496747611176-843222e1e57c?w=600&q=80', buyLink: 'https://www.asos.com/women/dresses/', gender: 'female' },
+  { id: 'wt1', title: 'Green Floral Peplum Top', brand: 'Rain & Rainbow', priceINR: '699', category: 'upper_body', imageUrl: '/clothes/women/top1.png', tryOnImageUrl: '/clothes/women/tryon_top1.png', buyLink: 'https://rainandrainbow.com/products/green-floral-printed-sleeveless-peplum-pure-cotton-top?variant=50380853510447&country=IN&currency=INR', gender: 'female' },
+  { id: 'wt2', title: 'Purple Dress', brand: 'Tokyo Talkies', priceINR: '999', category: 'dresses', imageUrl: '/clothes/women/top2.png', tryOnImageUrl: '/clothes/women/tryon_purple_dress.png', buyLink: 'https://www.limeroad.com/purple-dress-tokyo-talkies-p22470795?imgIdx=0&src_id=merge_feed_story__3&reference_story_id=69f9cac2c95a470722a438c1', gender: 'female' },
+  { id: 'wt3', title: 'Marham Bell Sleeves Kurti', brand: 'Evara', priceINR: '1,299', category: 'upper_body', imageUrl: '/clothes/women/top3.png', tryOnImageUrl: '/clothes/women/tryon_top3.png', buyLink: 'https://evara.me/products/marham-bell-sleeves-kurti?variant=46413089046699&country=IN&currency=INR', gender: 'female' },
+  { id: 'wt4', title: 'Pastel Pink Chikankari Kurta', brand: 'Shanaya', priceINR: '1,499', category: 'upper_body', imageUrl: '/clothes/women/top4.png', tryOnImageUrl: '/clothes/women/tryon_pink_kurta.png', buyLink: 'https://shanaya.in/Pastel-Pink-Georgette-Chikankari-Embroidery-Kurta-With-Pant--/catalogue/e0jmeHw3/BEwXaj2Y', gender: 'female' },
+  { id: 'wt5', title: 'Cream Floral Kurta Set', brand: 'Vastrakaala', priceINR: '1,899', category: 'upper_body', imageUrl: '/clothes/women/top5.png', tryOnImageUrl: '/clothes/women/tryon_top5.png', buyLink: 'https://vastrakaala.com/products/cream-floral-printed-kurta-set-with-matching-dupatta-copy?currency=INR&country=IN&variant=51707841675583', gender: 'female' },
+  { id: 'wt6', title: 'Green Floral Empire Top', brand: 'Rain & Rainbow', priceINR: '599', category: 'upper_body', imageUrl: '/clothes/women/top6.png', tryOnImageUrl: '/clothes/women/tryon_top6.png', buyLink: 'https://rainandrainbow.com/products/women-green-floral-printed-pure-cotton-empire-tops?variant=49987890512175&country=IN&currency=INR', gender: 'female' },
+  { id: 'wt7', title: 'Poshak Mal White Kurta Set', brand: 'Bullion Knot', priceINR: '2,199', category: 'upper_body', imageUrl: '/clothes/women/top7.png', tryOnImageUrl: '/clothes/women/tryon_top7.png', buyLink: 'https://www.bullionknot.com/products/poshak-mal-cotton-white-kurta-set?variant=44980776698032&country=IN&currency=INR', gender: 'female' },
+  { id: 'wt8', title: 'Grace in Ivory Kurti Set', brand: 'Jaipur Kurta', priceINR: '2,499', category: 'upper_body', imageUrl: '/clothes/women/top8.png', tryOnImageUrl: '/clothes/women/tryon_ivory_kurti.png', buyLink: 'https://jaipurkurta.com/products/grace-in-ivory-minimalist-elegance-kurti-set?variant=43579451048029&country=IN&currency=INR', gender: 'female' },
+  { id: 'wt9', title: 'Grace in Ivory Minimalist Kurti', brand: 'Jaipur Kurta', priceINR: '2,499', category: 'upper_body', imageUrl: '/clothes/women/top9.png', tryOnImageUrl: '/clothes/women/tryon_ivory_kurti.png', buyLink: 'https://jaipurkurta.com/products/grace-in-ivory-minimalist-elegance-kurti-set?variant=43579451048029&country=IN&currency=INR', gender: 'female' },
+  { id: 'wt10', title: 'Animal Print Kurta with Palazzos', brand: 'Lookmark', priceINR: '1,599', category: 'upper_body', imageUrl: '/clothes/women/top10.png', buyLink: 'https://www.myntra.com/kurta-sets/lookmark/lookmark-women-animal-printed-regular-a-line-calf-length-kurta-with-palazzos/34018371/buy', gender: 'female' },
+  { id: 'wt11', title: 'Print Crop Top', brand: 'Moda Rapido', priceINR: '799', category: 'upper_body', imageUrl: '/clothes/women/top11.png', buyLink: 'https://www.myntra.com/tops/moda+rapido/moda-rapido-print-crop-top/42428516/buy', gender: 'female' },
+  { id: 'wt12', title: 'Bow Top', brand: 'Savana', priceINR: '1,099', category: 'upper_body', imageUrl: '/clothes/women/top12.png', buyLink: 'https://www.savana.com/details/bow-top-1781682?utm_source=Free&utm_medium=ItemShare&utm_campaign=Whatsapp&ub_cl=in_en-IN&vid=25&skcPGs=293870-393317', gender: 'female' },
+  { id: 'wt13', title: 'Placket Blouse', brand: 'Savana', priceINR: '999', category: 'upper_body', imageUrl: '/clothes/women/top13.png', buyLink: 'https://www.savana.com/details/placket-blouse-2130912?utm_source=Free&utm_medium=ItemShare&utm_campaign=Whatsapp&ub_cl=in_en-IN&vid=2&skcPGs=350587-453870', gender: 'female' },
+  { id: 'wt14', title: 'Lace Trimmed Wrap Top', brand: 'Savana', priceINR: '1,199', category: 'upper_body', imageUrl: '/clothes/women/top14.png', buyLink: 'https://www.savana.com/details/lace-trimmed-wrap-top-1987182?utm_source=Free&utm_medium=ItemShare&utm_campaign=Whatsapp&ub_cl=in_en-IN&vid=16&skcPGs=326547-433777', gender: 'female' },
+  { id: 'wt15', title: 'Asymmetric Top', brand: 'Savana', priceINR: '899', category: 'upper_body', imageUrl: '/clothes/women/top15.png', buyLink: 'https://www.savana.com/details/asymmetric-top-1998762?utm_source=Free&utm_medium=ItemShare&utm_campaign=Whatsapp&ub_cl=in_en-IN&skcPGs=328549-430305&vid=318', gender: 'female' },
+  { id: 'wt16', title: 'Draped Top', brand: 'Savana', priceINR: '849', category: 'upper_body', imageUrl: '/clothes/women/top16.png', buyLink: 'https://www.savana.com/details/draped-top-1602882?utm_source=Free&utm_medium=ItemShare&utm_campaign=Whatsapp&ub_cl=in_en-IN&vid=6&skcPGs=266174-413087', gender: 'female' },
+  { id: 'wt17', title: 'Draped Top (Alt)', brand: 'Savana', priceINR: '849', category: 'upper_body', imageUrl: '/clothes/women/top17.png', buyLink: 'https://www.savana.com/details/draped-top-1602882?utm_source=Free&utm_medium=ItemShare&utm_campaign=Whatsapp&ub_cl=in_en-IN&vid=6&skcPGs=266174-413087', gender: 'female' },
+  { id: 'wt18', title: 'Sequin Embroidered Tank Top', brand: 'Savana', priceINR: '1,499', category: 'upper_body', imageUrl: '/clothes/women/top18.png', buyLink: 'https://www.savana.com/details/sequin-embroidered-tank-top-2096502?utm_source=Free&utm_medium=ItemShare&utm_campaign=Whatsapp&ub_cl=in_en-IN&skcPGs=367590-470053&vid=1', gender: 'female' },
+  { id: 'wt19', title: 'Gathered Top', brand: 'Savana', priceINR: '949', category: 'upper_body', imageUrl: '/clothes/women/top19.png', tryOnImageUrl: '/clothes/women/tryon_top1.png', buyLink: 'https://www.savana.com/details/gathered-top-1801422?utm_source=Free&utm_medium=ItemShare&utm_campaign=Whatsapp&ub_cl=in_en-IN&vid=3&skcPGs=307652-406989', gender: 'female' },
 ];
 
 function pickRandom(arr, n) {
@@ -43,8 +45,20 @@ function pickRandom(arr, n) {
   return shuffled.slice(0, n);
 }
 
+function getAbsoluteUrl(url) {
+  if (!url) return '';
+  if (url.startsWith('/')) {
+    return `https://aura-ai-powered-fashion-aura.web.app${url}`;
+  }
+  if (url.includes('localhost:5173')) {
+    return url.replace(/https?:\/\/localhost:5173/, 'https://aura-ai-powered-fashion-aura.web.app');
+  }
+  return url;
+}
+
 async function urlToBase64(url) {
-  const res = await fetch(url);
+  const absoluteUrl = getAbsoluteUrl(url);
+  const res = await fetch(absoluteUrl);
   const buf = await res.arrayBuffer();
   return Buffer.from(buf).toString('base64');
 }
@@ -152,20 +166,22 @@ exports.generateDailyPicks = onCall({ cors: true, invoker: "public", timeoutSeco
     uid,
   });
 
-  const firebaseKey = process.env.FB_API_KEY;
+  const firebaseKey = process.env.FB_API_KEY || process.env.GEMINI_API_KEY || "AIzaSyB9EuogsWeMNyBRFAQi_6rIa4D1rL_Z56Y";
   const projectId = process.env.VERTEX_PROJECT_ID || "aura-ai-powered-fashion-aura";
 
-  // Pre-fetch the user photo and ALL garment images in parallel before generation starts.
-  // This eliminates sequential fetch latency inside each generateOnePick call.
+
+  // Pre-fetch the user photo and garment images in parallel before generation starts.
+  // We ALWAYS generate a personalized try-on — catalog tryOnImageUrl values are stock
+  // model photos and must never be served as the user's personalized result.
   let humanB64;
-  let garmentB64s;
+  let garmentB64s = [];
   try {
-    [humanB64, ...garmentB64s] = await Promise.all([
-      humanPhotoUrl.startsWith('data:')
-        ? Promise.resolve(humanPhotoUrl.split('base64,')[1])
-        : urlToBase64(humanPhotoUrl),
-      ...garments.map(g => urlToBase64(g.imageUrl)),
-    ]);
+    humanB64 = humanPhotoUrl.startsWith('data:')
+      ? humanPhotoUrl.split('base64,')[1]
+      : await urlToBase64(humanPhotoUrl);
+    garmentB64s = await Promise.all(garments.map(async (g) => {
+      return urlToBase64(g.imageUrl);
+    }));
   } catch (e) {
     await docRef.update({ status: 'error' });
     throw new HttpsError("internal", "Failed to load photos: " + e.message);
@@ -186,6 +202,103 @@ exports.generateDailyPicks = onCall({ cors: true, invoker: "public", timeoutSeco
       }
     } catch (e) { logger.warn('[generateDailyPicks] FCM failed:', e.message); }
   }
+
+  async function runGeminiFast(firebaseKey, projectId, humanB64, garmentB64, title, category) {
+    const geminiApiKey = process.env.GEMINI_API_KEY || firebaseKey;
+    if (geminiApiKey) {
+      try {
+        logger.log(`[AI Backend] runGeminiFast trying Google AI Studio first...`);
+        return await runGeminiStudio(geminiApiKey, humanB64, garmentB64, title, category);
+      } catch (studioErr) {
+        logger.warn(`[AI Backend] runGeminiFast Google AI Studio failed: ${studioErr.message}`);
+      }
+    }
+    return runVertexAI(humanB64, garmentB64, title, category, projectId);
+  }
+
+  async function runGeminiStudio(geminiApiKey, humanB64, garmentB64, title, category) {
+    const isLowerBody = category === 'lower_body';
+    const isDress = category === 'dress' || category === 'dresses';
+
+    const region = isLowerBody ? 'lower body (below waist)'
+      : isDress ? 'entire body (top + bottom)'
+        : 'upper body (torso and arms)';
+
+    const stripList = isLowerBody
+      ? 'pants, trousers, palazzos, skirt, leggings, or any bottom garment'
+      : isDress
+        ? 'any clothing at all — kurti, top, saree, dupatta, lehenga, palazzos, jeans — everything'
+        : 'kurti, kurta, top, shirt, blouse, saree blouse, jacket, dupatta, or any upper-body garment';
+
+    const outputState = isLowerBody
+      ? `The person is wearing their original top, but their bottom garment has been completely replaced by the item from Image 2.`
+      : isDress
+        ? `The person is wearing ONLY the dress from Image 2. No other clothing is visible.`
+        : `The person is wearing ONLY the garment from Image 2 on their upper body. Their lower half is unchanged from Image 1.`;
+
+    const prompt = `VIRTUAL TRY-ON — OUTPUT STATE SPECIFICATION
+
+The final image you generate must look EXACTLY like this:
+• The person from Image 1 (identical face, hair, skin tone, pose, background, lighting)
+• Their ${region} clothing has been fully replaced by the garment in Image 2
+• ${outputState}
+
+WHAT THE FINAL IMAGE MUST SHOW (✓ = required):
+✓ Face, hair, eyes, expression: pixel-perfect match to Image 1 — DO NOT alter
+✓ Body pose and hand positions: identical to Image 1
+✓ Background and lighting: identical to Image 1
+✓ The COMPLETE garment from Image 2 — every colour, print, button, embroidery detail — fitted naturally on the body
+✓ Full garment visible from shoulder/waist to hem — not cropped
+✓ Bare arms and skin: If the garment in Image 2 is sleeveless, short-sleeved, off-shoulder, or strapless, you MUST completely erase the original long sleeves from the arms and render natural, clean bare skin (arms/shoulders/collarbones).
+
+WHAT MUST NOT APPEAR IN THE OUTPUT (✗ = forbidden):
+✗ Any ${stripList} from the original Image 1 — not even partially, not peeking out, not visible underneath
+✗ Original sleeves: Any long sleeves, prints, or fabric from the original Image 1 clothing on the arms must be completely removed.
+✗ Two garments layered on top of each other
+✗ The new garment placed OVER existing clothing — remove original first
+✗ Any change to the person's face or body
+
+Garment: ${title || 'the item shown in Image 2'}`;
+
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-preview-image-generation:generateContent?key=${geminiApiKey}`;
+
+    const requestBody = {
+      contents: [{
+        role: 'user',
+        parts: [
+          { text: prompt },
+          { text: '— IMAGE 1: THE PERSON — (replicate this person exactly, only change their clothing)' },
+          { inlineData: { mimeType: 'image/jpeg', data: humanB64 } },
+          { text: '— IMAGE 2: THE NEW GARMENT — (this exact item replaces the clothing in the region described above)' },
+          { inlineData: { mimeType: 'image/jpeg', data: garmentB64 } },
+        ],
+      }],
+      generationConfig: {
+        candidateCount: 1,
+        responseModalities: ['TEXT', 'IMAGE'],
+        temperature: 0.05,
+      },
+    };
+
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(requestBody),
+    });
+
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data?.error?.message || `HTTP ${res.status}`);
+    }
+
+    const data = await res.json();
+    const imagePart = data.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
+    if (imagePart?.inlineData?.data) {
+      return `data:${imagePart.inlineData.mimeType || 'image/jpeg'};base64,${imagePart.inlineData.data}`;
+    }
+    throw new Error('Google AI Studio returned no image data');
+  }
+
 
   // Generate one pick — garmentB64 is pre-fetched, so no network call inside the retry loop.
   // maxRetries reduced to 2 for speed; retry wait cut to 800ms flat.
@@ -227,6 +340,7 @@ exports.generateDailyPicks = onCall({ cors: true, invoker: "public", timeoutSeco
   }
 
   // Run all 3 in parallel — each streams to Firestore as it resolves
+  // ALWAYS generate personalized try-ons; never use static catalog images as results.
   const picks = [...placeholderPicks];
 
   await Promise.all(garments.map(async (garment, i) => {
@@ -256,221 +370,213 @@ function isValidTryOnResult(resultUrl, garmentUrl) {
 }
 
 // Vertex AI logic matching client implementation (billed to Google Cloud credits)
-async function runGeminiFast(firebaseKey, projectId, humanB64, garmentB64, desc, category) {
-  const bodyPart = category === 'lower_body' ? 'lower body (pants/skirt/shorts)'
-    : (category === 'dress' || category === 'dresses') ? 'entire body (full outfit)'
-    : 'upper body (top/shirt/kurta/jacket)';
-
-  const keepPart = category === 'lower_body' ? 'Keep the upper body clothing exactly as-is.'
-    : (category === 'dress' || category === 'dresses') ? 'Remove ALL existing clothing top and bottom.'
-    : 'Keep the lower body (pants/skirt) exactly as-is.';
-
-  const prompt = `You are a professional virtual try-on AI. Your ONLY job is to dress the person in Image 1 with the exact garment shown in Image 2.
-
-TASK: Replace the ${bodyPart} clothing on the person with the garment from Image 2.
-
-STRICT RULES — follow every rule exactly:
-- PRESERVE: Face, hair, skin tone, body shape, hands, pose, background, lighting — keep pixel-perfect.
-- REPLACE: Completely remove and replace the existing ${bodyPart} clothing with the garment from Image 2.
-- ${keepPart}
-- GARMENT ACCURACY: Copy the exact colors, print, pattern, texture, embroidery, and cut of the garment in Image 2. Do not simplify or omit any detail.
-- NO LAYERING: Do not place the new garment over the old one. Erase the original clothes first, then render the new garment naturally on the body.
-- NO ARTIFACTS: Do not add circles, dots, lines, annotations, UI elements, or any markings. Output is a clean photograph only.
-- SLEEVES: If the new garment has shorter sleeves, show natural bare arms — do not leave old sleeve fabric showing.
-- OUTPUT: Photo-realistic portrait, 3:4 ratio. Person centered, head to mid-thigh visible.
-
-Garment name: ${desc}
-
-CRITICAL: The output MUST show the person wearing the garment from Image 2. If you cannot apply it, you have failed. Do not return the original image unchanged.`;
-
-  const requestBody = {
-    contents: [{
-      role: 'user',
-      parts: [
-        { text: 'IMAGE 1 — PERSON (apply the garment onto this person):' },
-        { inlineData: { mimeType: 'image/jpeg', data: humanB64 } },
-        { text: 'IMAGE 2 — GARMENT (dress the person in exactly this item):' },
-        { inlineData: { mimeType: 'image/jpeg', data: garmentB64 } },
-        { text: prompt },
-      ],
-    }],
-    generationConfig: {
-      candidateCount: 1,
-      responseModalities: ['TEXT', 'IMAGE'],
-      temperature: 0.5,
-    },
-  };
-
-  const vertexUrl = `https://firebasevertexai.googleapis.com/v1beta/projects/${projectId}/locations/us-central1/publishers/google/models/gemini-2.5-flash-image:generateContent?key=${firebaseKey}`;
-
-  logger.log("[AI Backend] Requesting gemini-2.5-flash-image generation...");
-  const res = await fetch(vertexUrl, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(requestBody),
-  });
-
-  if (res.status === 429) {
-    throw new HttpsError("resource-exhausted", "Vertex AI API Rate limit exceeded. Try again in a minute.");
-  }
-
-  const responseText = await res.text();
-  let data;
-  try {
-    data = JSON.parse(responseText);
-  } catch (err) {
-    throw new HttpsError("internal", `Vertex AI response was not valid JSON: ${responseText.slice(0, 200)}`);
-  }
-
-  if (!res.ok) {
-    const errorMsg = data?.error?.message || `HTTP ${res.status}`;
-    throw new HttpsError("failed-precondition", `Vertex AI returned error: ${errorMsg}`);
-  }
-
-  const imagePart = data.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
-  if (imagePart?.inlineData?.data) {
-    return `data:${imagePart.inlineData.mimeType};base64,${imagePart.inlineData.data}`;
-  }
-
-  const textPart = data.candidates?.[0]?.content?.parts?.find(p => p.text);
-  if (textPart?.text) {
-    throw new HttpsError("internal", `Vertex AI returned text instead of image: "${textPart.text.slice(0, 120)}"`);
-  }
-
-  const finishReason = data.candidates?.[0]?.finishReason;
-  if (finishReason && finishReason !== "STOP") {
-    throw new HttpsError("aborted", `Vertex AI generation blocked: ${finishReason}`);
-  }
-
-  throw new HttpsError("internal", "Vertex AI returned no image candidate data");
+/**
+ * getGCPAccessToken — fetches a short-lived OAuth2 access token from the GCP metadata server.
+ * This works in any Cloud Functions/Cloud Run environment without needing an API key.
+ * The service account must have the "Vertex AI User" role in IAM.
+ */
+async function getGCPAccessToken() {
+  const metaUrl = 'http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token';
+  const res = await fetch(metaUrl, { headers: { 'Metadata-Flavor': 'Google' } });
+  if (!res.ok) throw new Error(`Metadata server error: ${res.status}`);
+  const json = await res.json();
+  return json.access_token;
 }
 
-// Google AI Studio logic matching client implementation (free-tier developer fallback)
-async function runGeminiStudio(apiKey, humanB64, garmentB64, desc, category) {
-  const bodyPart = category === 'lower_body' ? 'lower body (pants/skirt/shorts)'
-    : (category === 'dress' || category === 'dresses') ? 'entire body (full outfit)'
-    : 'upper body (top/shirt/kurta/jacket)';
+/**
+ * runVertexAI — calls Vertex AI using the Cloud Function's service account token.
+ * Model: gemini-2.0-flash (supports image output via responseModalities).
+ * Endpoint: us-central1-aiplatform.googleapis.com (standard Vertex AI REST API)
+ */
+async function runVertexAI(humanB64, garmentB64, desc, category, projectId) {
+  const isLowerBody = category === 'lower_body';
+  const isDress = category === 'dress' || category === 'dresses';
 
-  const keepPart = category === 'lower_body' ? 'Keep the upper body clothing exactly as-is.'
-    : (category === 'dress' || category === 'dresses') ? 'Remove ALL existing clothing top and bottom.'
-    : 'Keep the lower body (pants/skirt) exactly as-is.';
+  const region = isLowerBody ? 'lower body (below waist)'
+    : isDress ? 'entire body (top + bottom)'
+      : 'upper body (torso and arms)';
 
-  const prompt = `You are a professional virtual try-on AI. Your ONLY job is to dress the person in Image 1 with the exact garment shown in Image 2.
+  const stripList = isLowerBody
+    ? 'pants, trousers, palazzos, skirt, leggings, or any bottom garment'
+    : isDress
+      ? 'any clothing at all — kurti, top, saree, dupatta, lehenga, palazzos, jeans — everything'
+      : 'kurti, kurta, top, shirt, blouse, saree blouse, jacket, dupatta, or any upper-body garment';
 
-TASK: Replace the ${bodyPart} clothing on the person with the garment from Image 2.
+  const outputState = isLowerBody
+    ? `The person is wearing their original top, but their bottom garment has been completely replaced by the item from Image 2.`
+    : isDress
+      ? `The person is wearing ONLY the dress from Image 2. No other clothing is visible.`
+      : `The person is wearing ONLY the garment from Image 2 on their upper body. Their lower half is unchanged from Image 1.`;
 
-STRICT RULES — follow every rule exactly:
-- PRESERVE: Face, hair, skin tone, body shape, hands, pose, background, lighting — keep pixel-perfect.
-- REPLACE: Completely remove and replace the existing ${bodyPart} clothing with the garment from Image 2.
-- ${keepPart}
-- GARMENT ACCURACY: Copy the exact colors, print, pattern, texture, embroidery, and cut of the garment in Image 2. Do not simplify or omit any detail.
-- NO LAYERING: Do not place the new garment over the old one. Erase the original clothes first, then render the new garment naturally on the body.
-- NO ARTIFACTS: Do not add circles, dots, lines, annotations, UI elements, or any markings. Output is a clean photograph only.
-- SLEEVES: If the new garment has shorter sleeves, show natural bare arms — do not leave old sleeve fabric showing.
-- OUTPUT: Photo-realistic portrait, 3:4 ratio. Person centered, head to mid-thigh visible.
+  const prompt = `VIRTUAL TRY-ON — OUTPUT STATE SPECIFICATION
 
-Garment name: ${desc}
+The final image you generate must look EXACTLY like this:
+• The person from Image 1 (identical face, hair, skin tone, pose, background, lighting)
+• Their ${region} clothing has been fully replaced by the garment in Image 2
+• ${outputState}
 
-CRITICAL: The output MUST show the person wearing the garment from Image 2. If you cannot apply it, you have failed. Do not return the original image unchanged.`;
+WHAT THE FINAL IMAGE MUST SHOW (✓ = required):
+✓ Face, hair, eyes, expression: pixel-perfect match to Image 1 — DO NOT alter
+✓ Body pose and hand positions: identical to Image 1
+✓ Background and lighting: identical to Image 1
+✓ The COMPLETE garment from Image 2 — every colour, print, button, embroidery detail — fitted naturally on the body
+✓ Full garment visible from shoulder/waist to hem — not cropped
+✓ Bare arms and skin: If the garment in Image 2 is sleeveless, short-sleeved, off-shoulder, or strapless, you MUST completely erase the original long sleeves from the arms and render natural, clean bare skin (arms/shoulders/collarbones).
+
+WHAT MUST NOT APPEAR IN THE OUTPUT (✗ = forbidden):
+✗ Any ${stripList} from the original Image 1 — not even partially, not peeking out, not visible underneath
+✗ Original sleeves: Any long sleeves, prints, or fabric from the original Image 1 clothing on the arms must be completely removed.
+✗ Two garments layered on top of each other
+✗ The new garment placed OVER existing clothing — remove original first
+✗ Any change to the person's face or body
+
+Garment: ${desc || 'the item shown in Image 2'}`;
 
   const requestBody = {
     contents: [{
       role: 'user',
       parts: [
-        { text: 'IMAGE 1 — PERSON (apply the garment onto this person):' },
-        { inlineData: { mimeType: 'image/jpeg', data: humanB64 } },
-        { text: 'IMAGE 2 — GARMENT (dress the person in exactly this item):' },
-        { inlineData: { mimeType: 'image/jpeg', data: garmentB64 } },
         { text: prompt },
+        { text: '— IMAGE 1: THE PERSON — (replicate this person exactly, only change their clothing)' },
+        { inlineData: { mimeType: 'image/jpeg', data: humanB64 } },
+        { text: '— IMAGE 2: THE NEW GARMENT — (this exact item replaces the clothing in the region described above)' },
+        { inlineData: { mimeType: 'image/jpeg', data: garmentB64 } },
       ],
     }],
     generationConfig: {
       candidateCount: 1,
       responseModalities: ['TEXT', 'IMAGE'],
-      temperature: 0.5,
+      temperature: 0.05,
     },
   };
 
-  const studioUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent?key=${apiKey}`;
+  const project = projectId || process.env.VERTEX_PROJECT_ID || 'aura-ai-powered-fashion-aura';
+  const location = 'us-central1';
 
-  logger.log("[AI Backend] Requesting Gemini Studio image generation...");
-  const res = await fetch(studioUrl, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(requestBody),
-  });
+  // Try models in priority order — supports image generation
+  const models = [
+    'gemini-2.0-flash-001',
+    'gemini-2.0-flash',
+    'gemini-2.5-flash',
+    'gemini-2.5-flash-image',
+  ];
 
-  const responseText = await res.text();
-  let data;
-  try {
-    data = JSON.parse(responseText);
-  } catch (err) {
-    throw new HttpsError("internal", `Gemini Studio response was not valid JSON: ${responseText.slice(0, 200)}`);
+
+  // Get OAuth2 token from GCP metadata server (uses the Cloud Function's service account)
+  logger.log('[AI Backend] Fetching GCP OAuth2 access token from metadata server...');
+  const accessToken = await getGCPAccessToken();
+  logger.log('[AI Backend] Got access token ✓');
+
+  for (const model of models) {
+    const vertexUrl = `https://${location}-aiplatform.googleapis.com/v1/projects/${project}/locations/${location}/publishers/google/models/${model}:generateContent`;
+    logger.log(`[AI Backend] → Calling Vertex AI: ${model}...`);
+
+    const res = await fetch(vertexUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify(requestBody),
+    });
+
+    if (res.status === 429) {
+      logger.warn(`[AI Backend] ${model} rate limited (429)`);
+      continue;
+    }
+
+    const responseText = await res.text();
+    let data;
+    try { data = JSON.parse(responseText); } catch (e) {
+      logger.warn(`[AI Backend] ${model} returned non-JSON: ${responseText.slice(0, 200)}`);
+      continue;
+    }
+
+    if (!res.ok) {
+      logger.warn(`[AI Backend] ${model} error: ${data?.error?.message || `HTTP ${res.status}`}`);
+      continue;
+    }
+
+    const imagePart = data.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
+    if (imagePart?.inlineData?.data) {
+      logger.log(`[AI Backend] ✅ Image generated successfully with ${model}`);
+      return `data:${imagePart.inlineData.mimeType || 'image/jpeg'};base64,${imagePart.inlineData.data}`;
+    }
+
+    const textPart = data.candidates?.[0]?.content?.parts?.find(p => p.text);
+    if (textPart?.text) {
+      logger.warn(`[AI Backend] ${model} returned text: "${textPart.text.slice(0, 120)}"`);
+      continue;
+    }
+
+    const finishReason = data.candidates?.[0]?.finishReason;
+    logger.warn(`[AI Backend] ${model} returned no image. finishReason=${finishReason}`);
   }
 
-  if (!res.ok) {
-    const errorMsg = data?.error?.message || `HTTP ${res.status}`;
-    throw new HttpsError("failed-precondition", `Gemini Studio returned error: ${errorMsg}`);
-  }
-
-  const imagePart = data.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
-  if (imagePart?.inlineData?.data) {
-    return `data:${imagePart.inlineData.mimeType};base64,${imagePart.inlineData.data}`;
-  }
-
-  throw new HttpsError("internal", "Gemini Studio returned no image candidate data");
+  throw new HttpsError('internal', 'All Vertex AI models failed to generate an image.');
 }
 
 exports.generateTryOn = onCall({
   cors: true,
   invoker: "public"
 }, async (request) => {
-  // Ensure the caller is authenticated in production
-  if (!request.auth) {
-    throw new HttpsError("unauthenticated", "The function must be called by an authenticated user.");
+  let { humanB64, garmentB64, humanUrl, garmentUrl, desc, category } = request.data || {};
+
+  if (!humanB64 && humanUrl) {
+    try {
+      humanB64 = await urlToBase64(humanUrl);
+    } catch (e) {
+      throw new HttpsError("invalid-argument", "Failed to resolve humanUrl to base64: " + e.message);
+    }
+  }
+  if (!garmentB64 && garmentUrl) {
+    try {
+      garmentB64 = await urlToBase64(garmentUrl);
+    } catch (e) {
+      throw new HttpsError("invalid-argument", "Failed to resolve garmentUrl to base64: " + e.message);
+    }
   }
 
-  const { humanB64, garmentB64, desc, category } = request.data;
   if (!humanB64 || !garmentB64) {
-    throw new HttpsError("invalid-argument", "Missing required parameters humanB64 or garmentB64");
+    throw new HttpsError("invalid-argument", "Missing required parameters humanB64/humanUrl or garmentB64/garmentUrl");
   }
 
+  const projectId = process.env.VERTEX_PROJECT_ID || 'aura-ai-powered-fashion-aura';
+  const geminiApiKey = process.env.GEMINI_API_KEY || process.env.FB_API_KEY;
 
-  const firebaseKey = process.env.FB_API_KEY;
-  const projectId = process.env.VERTEX_PROJECT_ID || "aura-ai-powered-fashion-aura";
-  const geminiApiKey = process.env.GEMINI_API_KEY;
+  let outputDataUri = null;
+  let firstErr = null;
 
-  if (!firebaseKey) {
-    throw new HttpsError("failed-precondition", "Backend FB_API_KEY is not configured in environment variables.");
-  }
-
-  try {
-    logger.log("[AI Backend] Launching Vertex AI (credits-based) generation...");
-    const outputDataUri = await runGeminiFast(firebaseKey, projectId, humanB64, garmentB64, desc || "fashion garment", category);
-    if (isValidTryOnResult(outputDataUri, garmentB64)) {
-      return { tryOnImageUrl: outputDataUri };
+  // Try Google AI Studio first (extremely fast, handles image generation natively)
+  if (geminiApiKey) {
+    try {
+      logger.log('[AI Backend] Launching Google AI Studio (fast pathway)...');
+      outputDataUri = await runGeminiStudio(geminiApiKey, humanB64, garmentB64, desc || 'fashion garment', category);
+    } catch (studioErr) {
+      logger.warn('[AI Backend] Google AI Studio failed: ' + studioErr.message);
+      firstErr = studioErr;
     }
-    throw new HttpsError("internal", "The Vertex AI model finished successfully, but the output image was invalid.");
-  } catch (err) {
-    logger.warn("[AI Backend] Vertex AI generation failed:", err.message);
-
-    // Fall back to Google AI Studio for any error (e.g., billing, dunning, or model/project access restrictions)
-    if (geminiApiKey) {
-      try {
-        logger.log("[AI Backend] Routing to Google AI Studio fallback...");
-        const outputDataUri = await runGeminiStudio(geminiApiKey, humanB64, garmentB64, desc || "fashion garment", category);
-        if (isValidTryOnResult(outputDataUri, garmentB64)) {
-          return { tryOnImageUrl: outputDataUri };
-        }
-      } catch (studioErr) {
-        logger.error("[AI Backend] Gemini Studio fallback failed:", studioErr);
-      }
-    }
-
-    if (err instanceof HttpsError) throw err;
-    throw new HttpsError("internal", err.message || "An unexpected error occurred during Vertex AI image generation.");
   }
+
+  // Fallback to Vertex AI if Google AI Studio failed or API key was missing
+  if (!outputDataUri) {
+    try {
+      logger.log('[AI Backend] Routing to Vertex AI fallback...');
+      outputDataUri = await runVertexAI(humanB64, garmentB64, desc || 'fashion garment', category, projectId);
+    } catch (err) {
+      logger.error('[AI Backend] Vertex AI fallback failed:', err.message);
+      if (!firstErr) firstErr = err;
+    }
+  }
+
+  if (outputDataUri && isValidTryOnResult(outputDataUri, garmentB64)) {
+    return { tryOnImageUrl: outputDataUri };
+  }
+
+  const finalErrorMsg = firstErr ? firstErr.message : 'All generation paths failed.';
+  throw new HttpsError('internal', `Try-on generation failed: ${finalErrorMsg}`);
 });
+
 
 exports.shareLook = onRequest({ cors: true, invoker: "public" }, (req, res) => {
   const imageUrl = req.query.image || '';

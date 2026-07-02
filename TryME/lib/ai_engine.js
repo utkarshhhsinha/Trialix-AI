@@ -25,6 +25,7 @@ export const TRYON_BLOCK_DURATION_MS = 12 * 3600 * 1000; // 12 hours
 
 let _tryOnQueueTail = Promise.resolve();
 let _quotaBlockedUntil = 0;
+let _directCallsBlocked = false;
 
 function withTimeout(promise, ms, label = 'Operation') {
   return Promise.race([
@@ -164,7 +165,7 @@ export async function getCleanBase64(input, width = 512, height = 640, mode = 'f
           const response = await fetch(localUri, { signal: controller.signal });
           clearTimeout(timeoutId);
           if (!response.ok) throw new Error(`HTTP ${response.status}`);
-          
+
           const arrayBuffer = await response.arrayBuffer();
           const base64Data = encode(arrayBuffer);
           const tempPath = `${FileSystem.cacheDirectory}temp_dev_asset_${Date.now()}_${rand}.jpg`;
@@ -265,25 +266,48 @@ function isValidTryOnResult(resultUrl, garmentUrl) {
 async function runNanoBanana(humanB64, garmentB64, desc, category, onStatus) {
   if (!FIREBASE_API_KEY) throw new Error('EXPO_PUBLIC_FIREBASE_API_KEY is not set');
 
-  const replacementRule = category === 'lower_body'
-    ? 'Replace ONLY the pants/skirt/shorts with the garment in Image 2. Keep the upper body outfit exactly as in Image 1.'
-    : (category === 'dress' || category === 'dresses')
-      ? 'Replace the ENTIRE outfit (both top and bottom) with the dress in Image 2. Remove all previous clothing completely.'
-      : 'Replace ONLY the shirt/top/jacket with the garment in Image 2. Keep the pants/skirt exactly as in Image 1.';
+  const isLowerBody = category === 'lower_body';
+  const isDress = category === 'dress' || category === 'dresses';
 
-  const bodyPart = category === 'lower_body' ? 'lower body'
-    : (category === 'dress' || category === 'dresses') ? 'full body'
-    : 'upper body';
+  const region = isLowerBody ? 'lower body (below waist)'
+    : isDress ? 'entire body (top + bottom)'
+      : 'upper body (torso and arms)';
 
-  const prompt = `VIRTUAL TRY-ON: You are an expert AI fashion designer. Put the garment from Image 2 onto the person in Image 1.
-1. The person's face, hair, skin tone, body shape, pose, and background MUST remain identical to Image 1.
-2. ${replacementRule}
-3. CRITICAL: Completely erase, remove, and replace the existing ${bodyPart} clothing. Do NOT layer over old clothes.
-4. If the new garment has shorter sleeves than the original, COMPLETELY erase the original sleeves and show natural bare arms.
-5. Transfer the exact garment colors, patterns, textures, logos, and text from Image 2. Do NOT simplify details.
-6. CRITICAL: Do NOT return the person unchanged. You MUST apply the garment from Image 2.
-7. Output a 3:4 portrait (768x1024). Center the person with full head, shoulders, and torso visible.
-Garment: ${desc || 'fashion garment'}`;
+  const stripList = isLowerBody
+    ? 'pants, trousers, palazzos, skirt, leggings, or any bottom garment'
+    : isDress
+      ? 'any clothing at all — kurti, top, saree, dupatta, lehenga, palazzos, jeans — everything'
+      : 'kurti, kurta, top, shirt, blouse, saree blouse, jacket, dupatta, or any upper-body garment';
+
+  const outputState = isLowerBody
+    ? `The person is wearing their original top, but their bottom garment has been completely replaced by the item from Image 2.`
+    : isDress
+      ? `The person is wearing ONLY the dress from Image 2. No other clothing is visible.`
+      : `The person is wearing ONLY the garment from Image 2 on their upper body. Their lower half is unchanged from Image 1.`;
+
+  const prompt = `VIRTUAL TRY-ON — OUTPUT STATE SPECIFICATION
+
+The final image you generate must look EXACTLY like this:
+• The person from Image 1 (identical face, hair, skin tone, pose, background, lighting)
+• Their ${region} clothing has been fully replaced by the garment in Image 2
+• ${outputState}
+
+WHAT THE FINAL IMAGE MUST SHOW (✓ = required):
+✓ Face, hair, eyes, expression: pixel-perfect match to Image 1 — DO NOT alter
+✓ Body pose and hand positions: identical to Image 1
+✓ Background and lighting: identical to Image 1
+✓ The COMPLETE garment from Image 2 — every colour, print, button, embroidery detail — fitted naturally on the body
+✓ Full garment visible from shoulder/waist to hem — not cropped
+✓ Bare arms and skin: If the garment in Image 2 is sleeveless, short-sleeved, off-shoulder, or strapless, you MUST completely erase the original long sleeves from the arms and render natural, clean bare skin (arms/shoulders/collarbones).
+
+WHAT MUST NOT APPEAR IN THE OUTPUT (✗ = forbidden):
+✗ Any ${stripList} from the original Image 1 — not even partially, not peeking out, not visible underneath
+✗ Original sleeves: Any long sleeves, prints, or fabric from the original Image 1 clothing on the arms must be completely removed.
+✗ Two garments layered on top of each other
+✗ The new garment placed OVER existing clothing — remove original first
+✗ Any change to the person's face or body
+
+Garment: ${desc || 'the item shown in Image 2'}`;
 
   const requestBody = {
     contents: [{
@@ -396,7 +420,7 @@ function formatRemainingTime(ms) {
 export async function runVirtualTryOn(humanInput, garmentUrl, desc, onStatus, forceGemini = false, category = 'upper_body', options = {}) {
   const fast = options.fast !== false; // default fast for ~4s target
   const user = firebaseAuth?.currentUser;
-  
+
   if (user && firestore) {
     const profileRef = doc(firestore, 'profiles', user.uid);
     try {
@@ -404,7 +428,7 @@ export async function runVirtualTryOn(humanInput, garmentUrl, desc, onStatus, fo
       if (snap.exists()) {
         const data = snap.data();
         const now = Date.now();
-        
+
         // 1. Check if user is currently blocked under the 12-hour block timer
         if (data.tryOnBlockedUntil && now < data.tryOnBlockedUntil) {
           // If the daily count is under the current limit, the block is stale
@@ -412,7 +436,7 @@ export async function runVirtualTryOn(humanInput, garmentUrl, desc, onStatus, fo
           const currentCount = data.tryOnCountToday || 0;
           if (currentCount < DAILY_TRYON_LIMIT) {
             console.log('[AI Quota] Stale block detected — count is under new limit. Clearing block.');
-            await updateDoc(profileRef, { tryOnBlockedUntil: null }).catch(() => {});
+            await updateDoc(profileRef, { tryOnBlockedUntil: null }).catch(() => { });
             // Fall through to proceed with the try-on
           } else {
             const remainingMs = data.tryOnBlockedUntil - now;
@@ -427,7 +451,7 @@ export async function runVirtualTryOn(humanInput, garmentUrl, desc, onStatus, fo
         // 2. Check if the 24-hour daily cycle has reset
         let tryOnCountToday = data.tryOnCountToday || 0;
         let tryOnLastResetTime = data.tryOnLastResetTime || now;
-        
+
         if (now - tryOnLastResetTime >= 24 * 3600 * 1000) {
           tryOnCountToday = 0;
           tryOnLastResetTime = now;
@@ -466,18 +490,18 @@ export async function runVirtualTryOn(humanInput, garmentUrl, desc, onStatus, fo
       if (snap.exists()) {
         const data = snap.data();
         const now = Date.now();
-        
+
         let tryOnCountToday = (data.tryOnCountToday || 0) + 1;
         let updates = {
           tryOnCountToday: tryOnCountToday,
           tryOnLastResetTime: data.tryOnLastResetTime || now
         };
-        
+
         // If they just hit the daily limit, start the 12-hour block immediately
         if (tryOnCountToday >= DAILY_TRYON_LIMIT) {
           updates.tryOnBlockedUntil = now + TRYON_BLOCK_DURATION_MS;
         }
-        
+
         await updateDoc(profileRef, updates);
       }
     } catch (e) {
@@ -530,7 +554,7 @@ async function _runVirtualTryOnImpl(humanInput, garmentUrl, desc, onStatus, forc
       : Promise.resolve(null),
   ]);
 
-  if (!humanB64 || !garmentB64) throw new Error('Failed to read photos.');
+  const canUseDirectAPI = !!(humanB64 && garmentB64);
 
   onStatus?.('Generating…');
 
@@ -567,22 +591,39 @@ async function _runVirtualTryOnImpl(humanInput, garmentUrl, desc, onStatus, forc
 
   const runGen = async () => {
     // ── PRIMARY: Nano Banana (gemini-2.5-flash-image) called directly on Vertex AI
-    // Uses EXPO_PUBLIC_FIREBASE_API_KEY — no Cloud Run IAM, no extra secrets needed.
-    try {
-      console.log('[AI] Calling Nano Banana directly on Vertex AI (primary path)…');
-      const dataUri = await runNanoBanana(humanB64, garmentB64, enhancedDesc, resolvedCategory, onStatus);
-      if (dataUri) return dataUri;
-    } catch (nanoBananaErr) {
-      // Surface rate-limit errors immediately — don't waste time on the fallback
-      if (nanoBananaErr.isRateLimit) throw nanoBananaErr;
-      console.warn('[AI] Nano Banana direct call failed, trying Cloud Function fallback:', nanoBananaErr.message);
+    if (canUseDirectAPI && !_directCallsBlocked) {
+      try {
+        console.log('[AI] Calling Nano Banana directly on Vertex AI (primary path)…');
+        const dataUri = await runNanoBanana(humanB64, garmentB64, enhancedDesc, resolvedCategory, onStatus);
+        if (dataUri) return dataUri;
+      } catch (nanoBananaErr) {
+        // Surface rate-limit errors immediately — don't waste time on the fallback
+        if (nanoBananaErr.isRateLimit) throw nanoBananaErr;
+        console.warn('[AI] Nano Banana direct call failed, trying Cloud Function fallback:', nanoBananaErr.message);
+        
+        // 403/400 error indicates Google API restrictions or invalid keys — block future direct calls
+        if (nanoBananaErr.message.includes('Forbidden') || nanoBananaErr.message.includes('403') || nanoBananaErr.message.includes('400')) {
+          console.warn('[AI] Direct API key restricted. Blocking direct calls for this session.');
+          _directCallsBlocked = true;
+        }
+      }
+    } else {
+      console.log('[AI] Skipping direct calls (disabled or CORS blocked). Routing directly to Cloud Function...');
     }
 
     // ── FALLBACK: Firebase Cloud Function (same model, server-side)
     if (!firebaseFunctions) throw new Error('Nano Banana failed and Cloud Functions not configured.');
     console.log('[AI] Routing to Cloud Function fallback…');
     const generateTryOn = httpsCallable(firebaseFunctions, 'generateTryOn');
-    const response = await generateTryOn({ humanB64, garmentB64, desc: enhancedDesc, category: resolvedCategory, forceGemini });
+    const response = await generateTryOn({
+      humanB64: humanB64 || undefined,
+      garmentB64: garmentB64 || undefined,
+      humanUrl: typeof humanInput === 'string' && humanInput.startsWith('http') ? humanInput : undefined,
+      garmentUrl: typeof garmentHttpUrl === 'string' && garmentHttpUrl.startsWith('http') ? garmentHttpUrl : undefined,
+      desc: enhancedDesc,
+      category: resolvedCategory,
+      forceGemini
+    });
     if (response?.data?.tryOnImageUrl) return response.data.tryOnImageUrl;
     throw new Error('No try-on image returned from Cloud Function fallback.');
   };

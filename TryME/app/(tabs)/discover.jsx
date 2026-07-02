@@ -220,6 +220,25 @@ export default function DiscoverScreen() {
 
   useEffect(() => {
     if (status !== 'ready') return;
+
+    // Check if the loaded picks match the user's current profile gender
+    const gender = (profile?.gender || '').toLowerCase().trim();
+    const mismatch = picks.length > 0 && (
+      ((gender === 'male' || gender === 'man' || gender === 'men') && !picks[0]?.id?.startsWith('m')) ||
+      ((gender === 'female' || gender === 'woman' || gender === 'women') && !picks[0]?.id?.startsWith('wt'))
+    );
+
+    if (mismatch) {
+      console.log('[discover] Gender mismatch detected, clearing picks to trigger fresh batch...');
+      // Clear Firestore daily_picks so we get a clean slate for the new gender
+      if (user && firestore) {
+        const { deleteDoc, doc } = require('firebase/firestore');
+        deleteDoc(doc(firestore, 'daily_picks', user.uid)).catch(() => {});
+      }
+      setPicks([]);
+      return;
+    }
+
     const validPicks = picks.filter(p => p && (p.tryOnImageUrl || p.imageUrl));
     if (validPicks.length > 0) return;
     if (!profile?.basePhotoUrl) { setStatus('no-photo'); return; }

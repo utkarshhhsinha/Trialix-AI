@@ -80,10 +80,9 @@ export default function CardReveal({ tryOnImageUrl, placeholderSource, style }) 
         />
       )}
 
-      {/* Try-on image — rendered as soon as URL exists */}
       {tryOnImageUrl ? (
         <Animated.Image
-          source={{ uri: tryOnImageUrl }}
+          source={typeof tryOnImageUrl === 'number' ? tryOnImageUrl : { uri: tryOnImageUrl }}
           style={[StyleSheet.absoluteFillObject, { opacity: tryOnOpacity }]}
           resizeMode="cover"
         />

@@ -145,8 +145,8 @@ export default function Wishlist() {
             <Icon name="delete" size={15} color="#FF3B30" />
           </Pressable>
         </View>
-        <Text style={styles.cardTitle} numberOfLines={2}>{item.title}</Text>
-        <Text style={styles.cardPrice}>₹{item.price}</Text>
+        <Text style={styles.cardTitle} numberOfLines={2}>{item.title || item.garmentDesc || 'Outfit'}</Text>
+        <Text style={styles.cardPrice}>₹{item.price || item.priceINR || '999'}</Text>
 
         {/* Buy button */}
         <Pressable
