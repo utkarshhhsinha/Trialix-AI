@@ -25,9 +25,9 @@ export default function TrialRoomModal({ item, user, profile, onClose }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // intentionally empty — only run on mount
 
-  const handleRunTryOn = async (overridePhoto = null) => {
+  const handleRunTryOn = async (overridePhoto = null, forceRegenerate = false) => {
     if (!item) return;
-    if (item.tryOnImageUrl && (item.tryOnImageUrl.startsWith('data:') || item.tryOnImageUrl.includes('firebasestorage') || item.tryOnImageUrl.includes('storage.googleapis.com'))) {
+    if (!forceRegenerate && !overridePhoto && item.tryOnImageUrl && (item.tryOnImageUrl.startsWith('data:') || item.tryOnImageUrl.includes('firebasestorage') || item.tryOnImageUrl.includes('storage.googleapis.com'))) {
       setResultImage(item.tryOnImageUrl);
       setLoading(false);
       return;
@@ -184,7 +184,7 @@ export default function TrialRoomModal({ item, user, profile, onClose }) {
             <div style={{ textAlign: 'center', padding: '20px', color: theme.colors.danger }}>
               <AlertCircle size={40} style={{ marginBottom: '12px' }} />
               <p style={{ fontWeight: '600', fontSize: '14px', marginBottom: '16px' }}>{error}</p>
-              <button className="btn-primary" onClick={() => handleRunTryOn()}>Retry Fitting</button>
+              <button className="btn-primary" onClick={() => handleRunTryOn(null, true)}>Retry Fitting</button>
             </div>
           ) : resultImage ? (
             <img src={resultImage} alt="Try-On Result" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />

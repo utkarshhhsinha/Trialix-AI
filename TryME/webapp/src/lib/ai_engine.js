@@ -266,6 +266,7 @@ WHAT THE FINAL IMAGE MUST SHOW (✓ = required):
 WHAT MUST NOT APPEAR IN THE OUTPUT (✗ = forbidden):
 ✗ Any ${stripList} from the original Image 1 — not even partially, not peeking out, not visible underneath
 ✗ Original sleeves: Any long sleeves, prints, or fabric from the original Image 1 clothing on the arms must be completely removed.
+✗ Old clothing hem/skirt: If the person in Image 1 is wearing a long top, kurti, kurta, tunic, or dress, you must completely remove and erase its bottom half/skirt. Keep their original pants/jeans visible without any old clothing layering over them.
 ✗ Two garments layered on top of each other
 ✗ The new garment placed OVER existing clothing — remove original first
 ✗ Any change to the person's face or body

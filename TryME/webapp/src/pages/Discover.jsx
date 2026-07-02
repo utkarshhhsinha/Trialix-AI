@@ -295,26 +295,21 @@ export default function Discover({ profile, onOpenTrialRoom, onOpenCustomTryOn }
     let nextIdx = current + 1;
     setCurrentIndex(nextIdx);
 
-    // When all 3 are done, immediately load the next batch (no cooldown screen)
+    // When all 3 are done, write seenAt and nextBatchAt to trigger the cooldown batch timer page
     if (nextIdx >= 3 || nextIdx >= picks.length) {
-      setGenerating(true);
-      setShowDoneModal(false);
-      // Load new batch — generation fires in processAIClassifications
-      await loadGenderCatalog();
-      setGenerating(false);
+      if (user && firestore) {
+        try {
+          await updateDoc(doc(firestore, 'daily_picks', user.uid), {
+            seenAt: serverTimestamp(),
+            nextBatchAt: new Date(Date.now() + 5 * 60 * 1000)
+          });
+        } catch (err) {
+          console.warn('[Discover] Failed to write seenAt/nextBatchAt for daily_picks cooldown:', err);
+        }
+      }
+      setShowDoneModal(true);
     }
   };
-
-  // Automatically skip cards that fail to generate
-  useEffect(() => {
-    if (picks.length > 0 && currentIndex < picks.length) {
-      const currentItem = picks[currentIndex];
-      if (currentItem.generationStatus === 'failed') {
-        console.log(`[AI] Active card at index ${currentIndex} failed, skipping...`);
-        handleNextCard(currentIndex);
-      }
-    }
-  }, [picks, currentIndex]);
 
   const handleSwipeRight = async () => {
     const item = picks[currentIndex];
