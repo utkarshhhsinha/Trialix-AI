@@ -278,7 +278,7 @@ export default function TrialRoom() {
           {processing ? (
             <Animated.View style={[styles.resultInner, { transform: [{ scale: pulseAnim }] }]}>
               <Image
-                source={productImageUrl ? { uri: productImageUrl } : require('../Clothes/Men/shirts_men/1.png')}
+                source={productImageUrl ? { uri: productImageUrl } : require('@/Clothes/Men/shirts/shirt 1.png')}
                 style={styles.resultImage}
                 resizeMode="cover"
               />
@@ -291,7 +291,7 @@ export default function TrialRoom() {
           ) : (
             <Animated.View style={[styles.resultInner, { opacity: fadeAnim }]}>
               <Image
-                source={resultUrl ? { uri: resultUrl } : require('../Clothes/Men/shirts_men/1.png')}
+                source={resultUrl ? { uri: resultUrl } : require('@/Clothes/Men/shirts/shirt 1.png')}
                 style={styles.resultImage}
                 resizeMode="cover"
               />
