@@ -53,14 +53,14 @@ export default function App() {
   return (
     <BrowserRouter>
       <div className="app-layout">
-        {user && (
+        {user && profile !== null && (
           <Navigation 
             profile={profile}
             onOpenCustomTryOn={() => setShowCustomTryOn(true)}
           />
         )}
 
-        <div className="main-content">
+        <div className={`main-content ${(!user || profile === null) ? 'full-screen-content' : ''}`}>
           <Routes>
             <Route path="/login" element={!user ? <Login /> : <Navigate to="/discover" />} />
             <Route path="/profile-setup" element={user ? <ProfileSetup /> : <Navigate to="/login" />} />

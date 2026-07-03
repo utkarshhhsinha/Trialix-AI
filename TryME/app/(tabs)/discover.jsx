@@ -77,7 +77,7 @@ async function scheduleBatchNotification(seconds) {
     console.log(`[discover] Scheduling local notification in ${seconds}s`);
     await Notifications.scheduleNotificationAsync({
       content: {
-        title: "Your Trialix AI Looks are Ready! ✨",
+        title: "Your oraneo Looks are Ready! ✨",
         body: "Tap to view your new personalized AI try-on outfits.",
         sound: true,
         data: { screen: 'discover' },
@@ -325,7 +325,7 @@ export default function DiscoverScreen() {
   const handleShare = useCallback(async (card) => {
     try {
       await Share.share({
-        message: `Check out this AI try-on: ${card.title} by ${card.brand} — styled with TrialX AI`,
+        message: `Check out this AI try-on: ${card.title} by ${card.brand} — styled with oraneo`,
         url: card.tryOnImageUrl || card.imageUrl,
       });
     } catch (e) { }
@@ -631,7 +631,7 @@ export default function DiscoverScreen() {
               : <Ionicons name="person-circle" size={36} color="rgba(255,255,255,0.5)" />}
           </Pressable>
           <View style={s.headerCenter}>
-            <Text style={s.logoText}>TrialX</Text>
+            <Text style={s.logoText}>ora</Text>
             <Text style={s.logoAI}>AI</Text>
           </View>
           <View style={s.batchBadge}>

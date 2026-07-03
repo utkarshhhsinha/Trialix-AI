@@ -1,5 +1,5 @@
 /**
- * profile.jsx — TrialX AI
+ * profile.jsx — oraneo
  * Instagram + Pinterest style profile with cozy warm pastel theme.
  * Separate wishlist and try-on moodboards, emoji-free clean SVGs.
  */
@@ -197,7 +197,7 @@ export default function Profile() {
     try {
       const handle = (profile?.name || user?.email?.split('@')[0] || 'stylist').replace(/\s+/g, '');
       await Share.share({
-        message: `Check out my TrialX AI style profile @${handle}\n${APP_DOWNLOAD_LINK}`,
+        message: `Check out my oraneo style profile @${handle}\n${APP_DOWNLOAD_LINK}`,
         url: APP_DOWNLOAD_LINK,
       });
     } catch (_) { /* dismissed */ }

@@ -1,5 +1,5 @@
 /**
- * community.jsx — TrialX AI
+ * community.jsx — oraneo
  * Real-time community feed from Firestore community_posts.
  * Live likes, comments, WhatsApp share, and gallery download.
  */

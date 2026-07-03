@@ -128,7 +128,7 @@ export default function Wishlist() {
           />
           {item.tryOnImageUrl && (
             <View style={styles.aiBadge}>
-              <Text style={styles.aiBadgeText}>✨ Trialix AI</Text>
+              <Text style={styles.aiBadgeText}>✨ oraneo</Text>
             </View>
           )}
           {/* Small product thumbnail in corner if try-on exists and is different */}

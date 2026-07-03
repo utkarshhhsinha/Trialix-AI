@@ -10,7 +10,7 @@ import { incrementUserAura, incrementProfileStats } from '@/lib/community';
 // NOTE: expo-sharing native module (ExpoSharing) may not be linked in the dev build.
 // We rely solely on React Native's built-in Share API which always works.
 
-export const APP_DOWNLOAD_LINK = 'https://trialix.app';
+export const APP_DOWNLOAD_LINK = 'https://oraneo.space';
 
 let MediaLibrary = null;
 try {
@@ -41,13 +41,13 @@ export async function resolveImageToLocalUri(imageUrl) {
   }
   if (imageUrl.startsWith('data:image')) {
     const b64 = imageUrl.split('base64,')[1];
-    const uri = `${FileSystem.cacheDirectory}trialxai_${Date.now()}.jpg`;
+    const uri = `${FileSystem.cacheDirectory}oraneo_${Date.now()}.jpg`;
     await FileSystem.writeAsStringAsync(uri, b64, { encoding: 'base64' });
     return uri;
   }
   const dl = await FileSystem.downloadAsync(
     imageUrl,
-    `${FileSystem.cacheDirectory}trialxai_${Date.now()}.jpg`
+    `${FileSystem.cacheDirectory}oraneo_${Date.now()}.jpg`
   );
   return dl.uri;
 }
@@ -107,9 +107,9 @@ export function buildShareMessage({ title, brand }) {
     title ? `👕 ${title}` : null,
     brand ? `by ${brand}` : null,
     ``,
-    `Try on any outfit on YOUR body with TrialX AI — download free:`,
+    `Try on any outfit on YOUR body with oraneo — download free:`,
     APP_DOWNLOAD_LINK,
-    `#trialxai #virtualfashion #ootd`,
+    `#oraneo #virtualfashion #ootd`,
   ].filter(Boolean).join('\n');
 }
 
@@ -118,7 +118,7 @@ export function buildWhatsAppCaption({ title, brand }) {
   return [
     `✨ My AI try-on look${title ? `: ${title}` : ''}${brand ? ` by ${brand}` : ''}`,
     ``,
-    `Download TrialX AI free 👇`,
+    `Download oraneo free 👇`,
     APP_DOWNLOAD_LINK,
   ].filter(Boolean).join('\n');
 }
@@ -126,13 +126,68 @@ export function buildWhatsAppCaption({ title, brand }) {
 export async function downloadTryOnImage(imageUrl) {
   if (!imageUrl) throw new Error('No image to download');
 
-  const compressedUri = await compressImageForShare(imageUrl);
+  let localUri = await compressImageForShare(imageUrl);
+
+  // Apply watermark using react-native-image-marker
+  try {
+    const MarkerModule = require('react-native-image-marker');
+    const Marker = MarkerModule.default || MarkerModule;
+    const { Position, ImageFormat } = MarkerModule;
+
+    // Get image dimensions to scale font size dynamically
+    let imageWidth = 1080; // default/fallback width from compression
+    try {
+      const ImageManipulator = require('expo-image-manipulator');
+      const info = await ImageManipulator.manipulateAsync(localUri, []);
+      if (info.width) imageWidth = info.width;
+    } catch (e) {
+      console.warn('[socialActions] Failed to get image dimensions, using fallback:', e.message);
+    }
+
+    // font size is ~3% of image width (e.g. ~32px for 1080px wide image)
+    const fontSize = Math.max(16, Math.min(48, Math.round(imageWidth * 0.03)));
+
+    const markedUri = await Marker.markText({
+      backgroundImage: {
+        src: localUri,
+      },
+      watermarkTexts: [
+        {
+          text: 'styled by 🔍 oraneo',
+          position: {
+            position: Position.bottomRight,
+          },
+          style: {
+            color: '#FFFFFF',
+            fontSize: fontSize,
+            fontName: 'Arial-BoldMT',
+            shadowStyle: {
+              dx: Math.max(1, Math.round(fontSize * 0.06)),
+              dy: Math.max(1, Math.round(fontSize * 0.06)),
+              radius: Math.max(2, Math.round(fontSize * 0.12)),
+              color: '#000000',
+            },
+          },
+        },
+      ],
+      saveFormat: ImageFormat.jpeg,
+      quality: 95,
+    });
+
+    // Cleanup the compressed temp image if it's different
+    if (localUri !== markedUri && localUri.includes(FileSystem.cacheDirectory)) {
+      FileSystem.deleteAsync(localUri, { idempotent: true }).catch(() => { });
+    }
+    localUri = markedUri;
+  } catch (err) {
+    console.warn('[socialActions] Failed to apply watermark on mobile, saving original:', err.message);
+  }
 
   if (MediaLibrary?.requestPermissionsAsync && MediaLibrary?.saveToLibraryAsync) {
     const { status } = await MediaLibrary.requestPermissionsAsync();
     if (status === 'granted') {
-      await MediaLibrary.saveToLibraryAsync(compressedUri);
-      return { saved: true, uri: compressedUri };
+      await MediaLibrary.saveToLibraryAsync(localUri);
+      return { saved: true, uri: localUri };
     }
     if (status === 'denied') {
       throw new Error('Photo library permission denied. Enable it in Settings.');
@@ -140,11 +195,11 @@ export async function downloadTryOnImage(imageUrl) {
   }
 
   await Share.share({
-    title: 'My TrialX AI Look',
-    url: compressedUri,
+    title: 'My oraneo Look',
+    url: localUri,
     message: buildShareMessage({}),
   });
-  return { saved: false, uri: compressedUri };
+  return { saved: false, uri: localUri };
 }
 
 /**
@@ -188,13 +243,13 @@ export async function postTryOnToCommunity({ user, profile, card }) {
   const CAPTION_TEMPLATES = [
     (un, brand, title) => `${un} rocking the ${title} by ${brand}!`,
     (un, brand, title) => `Rate this fit! ${un} in the ${title} from ${brand}.`,
-    (un, brand, title) => `Styled with TrialX AI: ${un} wearing the ${title} by ${brand}.`,
+    (un, brand, title) => `Styled with oraneo: ${un} wearing the ${title} by ${brand}.`,
     (un, brand, title) => `New look unlocked! ${un} slays in the ${title}.`,
     (un, brand, title) => `${un} styling the ${title} by ${brand} — cop or drop?`,
   ];
 
   const template = CAPTION_TEMPLATES[Math.floor(Math.random() * CAPTION_TEMPLATES.length)];
-  const caption = template(formattedUserName, card.brand || 'TrialX Brand', card.title || 'Garment');
+  const caption = template(formattedUserName, card.brand || 'oraneo Brand', card.title || 'Garment');
   const resultImageUrl = await compressImageForFirestore(card.tryOnImageUrl || card.imageUrl);
 
   let garmentImageUrl = card.productImageUrl || card.imageUrl;
@@ -219,7 +274,7 @@ export async function postTryOnToCommunity({ user, profile, card }) {
     resultImageUrl,
     garmentImageUrl: garmentImageUrl || null,
     garmentDesc: card.title || 'Fashion Fit',
-    brand: card.brand || 'TrialX Brand',
+    brand: card.brand || 'oraneo Brand',
     buyLink: card.buyLink || '',
     caption,
     likes: 0,

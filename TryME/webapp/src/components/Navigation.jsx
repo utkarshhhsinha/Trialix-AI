@@ -43,7 +43,7 @@ export default function Navigation({ profile, onOpenCustomTryOn, onOpenAIGen }) 
           <NavLink to="/discover" style={{ textDecoration: 'none' }}>
             <img 
               src="/icon.png" 
-              alt="TrialX AI" 
+              alt="oraneo" 
               style={{
                 width: '32px', 
                 height: '32px', 

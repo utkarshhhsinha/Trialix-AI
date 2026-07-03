@@ -7,7 +7,7 @@ import { wp } from '@/helper/common';
 import Button from '@/components/Button';
 import { useRouter } from 'expo-router';
 import { theme } from '@/constants/theme';
-import TrialixLogo from '@/components/TrialixLogo';
+import OraneoLogo from '@/components/OraneoLogo';
 
 const Welcome = () => {
   const router = useRouter();
@@ -22,8 +22,8 @@ const Welcome = () => {
       />
       <SafeAreaView style={styles.container}>
         <View style={styles.logoContainer}>
-          <TrialixLogo size={120} />
-          <Text style={styles.brandName}>Trialix</Text>
+          <OraneoLogo size={120} />
+          <Text style={styles.brandName}>oraneo</Text>
           <Text style={styles.tagline}>The future of AI fashion</Text>
         </View>
 

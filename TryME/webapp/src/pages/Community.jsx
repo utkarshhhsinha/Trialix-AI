@@ -138,7 +138,7 @@ export default function Community({ onOpenTrialRoom }) {
                           <span style={{ fontWeight: '700', fontSize: '14px', color: 'white' }}>{post.userName}</span>
                           <span style={{ color: '#a8a8a8', fontSize: '12px' }}>• 1 h</span>
                         </div>
-                        <span style={{ fontSize: '11px', color: '#a8a8a8', display: 'block' }}>{post.brand || 'TrialX AI'}</span>
+                        <span style={{ fontSize: '11px', color: '#a8a8a8', display: 'block' }}>{post.brand || 'oraneo'}</span>
                       </div>
                     </div>
                     <button style={{ background: 'none', border: 'none', color: 'white', cursor: 'pointer' }}><MoreHorizontal size={20} /></button>
@@ -160,7 +160,7 @@ export default function Community({ onOpenTrialRoom }) {
                     <div className="post-likes-count">{Math.max(0, post.likes || 0)} likes</div>
                     <div className="post-caption">
                       <span className="post-caption-user">{post.userName}</span>
-                      {post.caption || `Styled "${post.garmentDesc || 'Outfit'}" with TrialX AI`}
+                      {post.caption || `Styled "${post.garmentDesc || 'Outfit'}" with oraneo`}
                     </div>
                     {post.commentsCount > 0 && (
                       <button onClick={() => setActivePost(post)} style={{ background: 'none', border: 'none', color: '#a8a8a8', fontSize: '13px', padding: 0, marginTop: '8px', cursor: 'pointer' }}>
@@ -189,7 +189,7 @@ export default function Community({ onOpenTrialRoom }) {
               <div style={{ width: 48, height: 48, borderRadius: '14px', background: `linear-gradient(135deg,${theme.colors.primary},#D4815A)`, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px', boxShadow: '0 6px 18px rgba(196,120,90,0.35)' }}>
                 <Download size={24} color="white" />
               </div>
-              <h3 style={{ fontSize: '15px', fontWeight: '900', color: 'white', fontFamily: 'Outfit,sans-serif', marginBottom: '4px' }}>Get the TrialX AI App</h3>
+              <h3 style={{ fontSize: '15px', fontWeight: '900', color: 'white', fontFamily: 'Outfit,sans-serif', marginBottom: '4px' }}>Get the oraneo App</h3>
               <p style={{ fontSize: '12px', color: 'rgba(255,255,255,0.45)', marginBottom: '14px', lineHeight: 1.4 }}>Try on any outfit with your photo. Available on Android & iOS.</p>
               <div style={{ background: '#111', borderRadius: '14px', padding: '10px', border: '1px solid rgba(196,120,90,0.2)', display: 'inline-block', marginBottom: '14px' }}>
                 <img src={QR_URL} alt="Download QR" width={130} height={130} style={{ display: 'block', borderRadius: '8px' }}
@@ -205,7 +205,7 @@ export default function Community({ onOpenTrialRoom }) {
             {/* Active users from real feed */}
             {storyUsers.filter(s => !s.isMe).length > 0 && (
               <div>
-                <span style={{ color: '#a8a8a8', fontWeight: '700', fontSize: '13px', display: 'block', marginBottom: '12px' }}>Active on TrialX</span>
+                <span style={{ color: '#a8a8a8', fontWeight: '700', fontSize: '13px', display: 'block', marginBottom: '12px' }}>Active on oraneo</span>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
                   {storyUsers.filter(s => !s.isMe).slice(0, 5).map((sug, idx) => (
                     <div key={sug.userId || idx} style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
@@ -222,7 +222,7 @@ export default function Community({ onOpenTrialRoom }) {
 
             <div style={{ color: '#737373', fontSize: '11px', marginTop: '24px', lineHeight: '1.6' }}>
               About · Help · Privacy · Terms
-              <div style={{ marginTop: '8px' }}>© 2026 TRIALIX AI</div>
+              <div style={{ marginTop: '8px' }}>© 2026 oraneo</div>
             </div>
           </div>
         </div>
@@ -272,14 +272,14 @@ export default function Community({ onOpenTrialRoom }) {
                   <span style={{ fontSize: '16px', fontWeight: '900' }}>{post.userName || 'Fashionista'}</span>
                   <span style={{ background: 'rgba(196,120,90,0.6)', padding: '2px 8px', borderRadius: '10px', fontSize: '10px', fontWeight: '800' }}>{post.rank || 'STYLE PRO'}</span>
                 </div>
-                <p style={{ fontSize: '14px', lineHeight: 1.35, textShadow: '0 2px 4px rgba(0,0,0,0.6)' }}>{post.caption || `Styled "${post.garmentDesc || 'Outfit'}" with TrialX AI`}</p>
+                <p style={{ fontSize: '14px', lineHeight: 1.35, textShadow: '0 2px 4px rgba(0,0,0,0.6)' }}>{post.caption || `Styled "${post.garmentDesc || 'Outfit'}" with oraneo`}</p>
               </div>
               <div style={{ background: 'rgba(255,255,255,0.92)', backdropFilter: 'blur(12px)', borderRadius: '24px', padding: '10px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', color: theme.colors.text, boxShadow: '0 10px 30px rgba(0,0,0,0.3)' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                   <img src={post.garmentImageUrl || post.productImageUrl || post.resultImageUrl} style={{ width: 44, height: 44, borderRadius: '12px', objectFit: 'cover' }} />
                   <div>
                     <h4 style={{ fontSize: '14px', fontWeight: '900', lineHeight: 1.2 }}>{post.garmentDesc || post.title || 'Outfit'}</h4>
-                    <span style={{ fontSize: '11px', fontWeight: '800', color: theme.colors.primary, textTransform: 'uppercase' }}>{post.brand || 'TrialX'}</span>
+                    <span style={{ fontSize: '11px', fontWeight: '800', color: theme.colors.primary, textTransform: 'uppercase' }}>{post.brand || 'oraneo'}</span>
                   </div>
                 </div>
                 <button className="btn-primary" onClick={() => onOpenTrialRoom?.({ title: post.garmentDesc || post.title, imageUrl: post.garmentImageUrl || post.productImageUrl || post.resultImageUrl })} style={{ padding: '8px 18px', borderRadius: '16px', fontSize: '13px' }}>Try On</button>
@@ -298,7 +298,7 @@ export default function Community({ onOpenTrialRoom }) {
         <div style={{ position: 'relative', zIndex: 2, width: '100%', maxWidth: '380px', textAlign: 'center' }}>
           <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', background: 'rgba(196,120,90,0.15)', border: `1px solid rgba(196,120,90,0.3)`, borderRadius: '20px', padding: '6px 14px', marginBottom: '22px' }}>
             <Sparkles size={13} color={theme.colors.primary} />
-            <span style={{ fontSize: '12px', fontWeight: '800', color: theme.colors.primaryLight, letterSpacing: '0.5px' }}>TRIALIX AI APP</span>
+            <span style={{ fontSize: '12px', fontWeight: '800', color: theme.colors.primaryLight, letterSpacing: '0.5px' }}>oraneo APP</span>
           </div>
 
           <h2 style={{ fontFamily: 'Outfit,sans-serif', fontSize: '30px', fontWeight: '900', color: 'white', lineHeight: 1.15, marginBottom: '10px', letterSpacing: '-0.5px' }}>
@@ -326,7 +326,7 @@ export default function Community({ onOpenTrialRoom }) {
 
           <a href={APP_DOWNLOAD_URL} target="_blank" rel="noopener noreferrer"
             style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', width: '100%', padding: '16px', borderRadius: '20px', fontSize: '16px', fontWeight: '900', background: `linear-gradient(135deg,${theme.colors.primary},#D4815A)`, color: 'white', textDecoration: 'none', boxShadow: '0 12px 32px rgba(196,120,90,0.4)', letterSpacing: '0.3px' }}>
-            <Download size={18} /> Download TrialX AI — Free
+            <Download size={18} /> Download oraneo — Free
           </a>
           <p style={{ fontSize: '11px', color: 'rgba(255,255,255,0.2)', marginTop: '14px' }}>Powered by Expo · No subscription required</p>
         </div>

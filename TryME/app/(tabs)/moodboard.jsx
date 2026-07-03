@@ -1,5 +1,5 @@
 /**
- * moodboard.jsx — TrialX AI
+ * moodboard.jsx — oraneo
  * Pinterest-style pinboard of saved AI try-on looks.
  * Replaces "Wishlist" in the nav.
  */

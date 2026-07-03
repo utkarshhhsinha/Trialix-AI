@@ -15,7 +15,7 @@ import { StatusBar } from 'expo-status-bar';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
-import TrialixLogo from '@/components/TrialixLogo';
+import OraneoLogo from '@/components/OraneoLogo';
 
 const { width: W } = Dimensions.get('window');
 const PHOTO_W = W - 80;
@@ -378,7 +378,7 @@ export default function ProfileSetup() {
                 <Ionicons name="log-out-outline" size={22} color="white" />
               </Pressable>
             )}
-            <TrialixLogo size={40} showRing={false} />
+            <OraneoLogo size={40} showRing={false} />
             <Text style={styles.stepCounter}>{step + 1}/{STEPS.length}</Text>
           </View>
 
@@ -542,7 +542,7 @@ export default function ProfileSetup() {
                     Start swiping outfits — every right swipe runs AI try-on on you.
                   </Text>
                   <View style={styles.perkRow}>
-                    {['✨ Trialix AI', '♥ Wishlist', '🔥 Aura'].map(p => (
+                    {['✨ oraneo', '♥ Wishlist', '🔥 Aura'].map(p => (
                       <View key={p} style={styles.perkChip}>
                         <Text style={styles.perkText}>{p}</Text>
                       </View>

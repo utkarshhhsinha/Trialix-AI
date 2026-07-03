@@ -1,5 +1,5 @@
 /**
- * ai_engine.js — TrialX AI Engine (v32.0 for Web)
+ * ai_engine.js — oraneo Engine (v32.0 for Web)
  *
  * PRIMARY:  Google AI Studio (generativelanguage.googleapis.com)
  *           Model: gemini-2.0-flash-preview-image-generation
@@ -200,21 +200,21 @@ export async function getCleanBase64(input, width = 512, height = 640, mode = 'f
   }
 }
 
-/** Reject results that are just the garment flat-lay or an unchanged base photo (generation failed silently) */
-function isValidTryOnResult(resultUrl, garmentUrl, humanB64) {
+function isValidTryOnResult(resultUrl, garmentUrl, humanB64, humanInput) {
   if (!resultUrl) return false;
   if (resultUrl === garmentUrl) return false;
+  if (humanInput && resultUrl === humanInput) {
+    console.warn('[AI] ⚠ Result is identical to input human photo URL — treating as failed generation');
+    return false;
+  }
   // Data URI too short = probably empty or corrupted
   if (resultUrl.startsWith('data:') && resultUrl.length < 8000) return false;
   // Detect if model returned the original base photo unchanged:
-  // If result is a data URI and it is very close in size to the human base64, 
-  // AND the garment is clearly different in design, it's likely unchanged.
   if (resultUrl.startsWith('data:') && humanB64 && humanB64.length > 5000) {
     const resultB64 = resultUrl.split('base64,')[1] || '';
-    // If the result data is within 2% of the human input length and starts similarly, it's unchanged
     const lenDiff = Math.abs(resultB64.length - humanB64.length);
-    const threshold = humanB64.length * 0.03;
-    if (lenDiff < threshold && resultB64.slice(0, 100) === humanB64.slice(0, 100)) {
+    const threshold = humanB64.length * 0.08; // 8% tolerance — reject near-identical outputs
+    if (lenDiff < threshold && resultB64.slice(0, 200) === humanB64.slice(0, 200)) {
       console.warn('[AI] ⚠ Result appears identical to input photo — treating as failed generation');
       return false;
     }
@@ -248,46 +248,38 @@ function buildTryOnRequest(humanB64, garmentB64, desc, category) {
       ? `The person is wearing ONLY the dress from Image 2. No other clothing is visible.`
       : `The person is wearing ONLY the garment from Image 2 on their upper body. Their lower half is unchanged from Image 1.`;
 
-  const prompt = `VIRTUAL TRY-ON — OUTPUT STATE SPECIFICATION
+  const prompt = `You are a virtual try-on AI. Your task is to generate a photorealistic image of the PERSON from Image 1 wearing the GARMENT from Image 2.
 
-The final image you generate must look EXACTLY like this:
-• The person from Image 1 (identical face, hair, skin tone, pose, background, lighting)
-• Their ${region} clothing has been fully replaced by the garment in Image 2
-• ${outputState}
+STEP-BY-STEP INSTRUCTIONS:
+1. Look at Image 1: this is the PERSON. Memorize their face, hair, skin tone, body shape, pose, and background. DO NOT change anything about them except their clothing.
+2. Look at Image 2: this is ONLY the GARMENT to be worn. Ignore any model or person shown in Image 2 — use ONLY the garment itself.
+3. Remove the person's existing ${stripList} completely from the ${region}. The original clothing must be 100% removed and erased.
+4. NO BLENDING/LAYERING: Do NOT merge, blend, overlay, or layer the garment from Image 2 over the original clothing. The original clothing must be completely gone, not showing underneath or around the new garment.
+5. Dress the person from Image 1 in the exact garment from Image 2: same color, same print, same fabric texture, same design details.
+6. ${outputState}
+7. Ensure natural fit, correct drape, realistic lighting and shadows matching Image 1's lighting.
+8. Output ONLY the single person from Image 1 wearing the new garment. Same pose, same background, same face — only the ${region} clothing changes.
 
-WHAT THE FINAL IMAGE MUST SHOW (✓ = required):
-✓ Face, hair, eyes, expression: pixel-perfect match to Image 1 — DO NOT alter
-✓ Body pose and hand positions: identical to Image 1
-✓ Background and lighting: identical to Image 1
-✓ The COMPLETE garment from Image 2 — every colour, print, button, embroidery detail — fitted naturally on the body
-✓ Full garment visible from shoulder/waist to hem — not cropped
-✓ Bare arms and skin: If the garment in Image 2 is sleeveless, short-sleeved, off-shoulder, or strapless, you MUST completely erase the original long sleeves from the arms and render natural, clean bare skin (arms/shoulders/collarbones).
+Garment name: ${desc || 'item shown in Image 2'}
 
-WHAT MUST NOT APPEAR IN THE OUTPUT (✗ = forbidden):
-✗ Any ${stripList} from the original Image 1 — not even partially, not peeking out, not visible underneath
-✗ Original sleeves: Any long sleeves, prints, or fabric from the original Image 1 clothing on the arms must be completely removed.
-✗ Old clothing hem/skirt: If the person in Image 1 is wearing a long top, kurti, kurta, tunic, or dress, you must completely remove and erase its bottom half/skirt. Keep their original pants/jeans visible without any old clothing layering over them.
-✗ Two garments layered on top of each other
-✗ The new garment placed OVER existing clothing — remove original first
-✗ Any change to the person's face or body
-
-Garment: ${desc || 'the item shown in Image 2'}`;
+CRITICAL: The output MUST visually look different from Image 1. The ${region} clothing MUST be replaced. If you cannot do the swap, still output the person with a clearly different garment.
+Output: one photorealistic portrait image, high quality, no text, no borders.`;
 
   return {
     contents: [{
       role: 'user',
       parts: [
-        { text: prompt },
-        { text: '— IMAGE 1: THE PERSON — (replicate this person exactly, only change their clothing)' },
+        { text: 'Image 1 — PERSON (preserve everything except clothing):' },
         { inlineData: { mimeType: 'image/jpeg', data: humanB64 } },
-        { text: '— IMAGE 2: THE NEW GARMENT — (this exact item replaces the clothing in the region described above)' },
+        { text: 'Image 2 — GARMENT ONLY (use only the garment, ignore any model in this image):' },
         { inlineData: { mimeType: 'image/jpeg', data: garmentB64 } },
+        { text: prompt },
       ],
     }],
     generationConfig: {
       candidateCount: 1,
       responseModalities: ['TEXT', 'IMAGE'],
-      temperature: 0.05,
+      temperature: 0.1,
     },
   };
 }
@@ -404,6 +396,18 @@ export async function runVirtualTryOn(humanInput, garmentUrl, desc, onStatus, fo
       if (snap.exists()) {
         const data = snap.data();
         const now = Date.now();
+        const lastReset = data.tryOnLastResetTime || 0;
+        const isNewDay = new Date(lastReset).toDateString() !== new Date().toDateString();
+
+        if (isNewDay) {
+          await updateDoc(profileRef, {
+            tryOnCountToday: 0,
+            tryOnLastResetTime: now,
+            tryOnBlockedUntil: null
+          }).catch(() => { });
+          data.tryOnCountToday = 0;
+          data.tryOnBlockedUntil = null;
+        }
 
         if (data.tryOnBlockedUntil && now < data.tryOnBlockedUntil) {
           const currentCount = data.tryOnCountToday || 0;
@@ -429,44 +433,45 @@ export async function runVirtualTryOn(humanInput, garmentUrl, desc, onStatus, fo
   );
 
   if (result && result !== garmentUrl && user && firestore) {
-    try {
-      let finalTryOnUrl = result;
-      // If the result is a raw base64 data URI, upload it to Firebase Storage!
-      if (result.startsWith('data:')) {
-        const path = 'tryon-results';
-        const fileName = `${user.uid}_${Date.now()}.jpg`;
-        const cleanB64 = result.split('base64,')[1] || result;
-        const storageRef = ref(storage, `${path}/${fileName}`);
-        await uploadString(storageRef, cleanB64, 'base64', { contentType: 'image/jpeg' });
-        finalTryOnUrl = await getDownloadURL(storageRef);
-        console.log('[AI] ✅ Uploaded generated try-on to Storage:', finalTryOnUrl);
-      }
+    // Fire-and-forget: upload to Storage + save to Firestore in background
+    // Do NOT await — return result URL immediately for fastest UX
+    (async () => {
+      try {
+        let finalTryOnUrl = result;
+        if (result.startsWith('data:')) {
+          const path = 'tryon-results';
+          const fileName = `${user.uid}_${Date.now()}.jpg`;
+          const cleanB64 = result.split('base64,')[1] || result;
+          const storageRef = ref(storage, `${path}/${fileName}`);
+          await uploadString(storageRef, cleanB64, 'base64', { contentType: 'image/jpeg' });
+          finalTryOnUrl = await getDownloadURL(storageRef);
+          console.log('[AI] ✅ Uploaded generated try-on to Storage (background):', finalTryOnUrl);
+        }
 
-      let finalGarmentUrl = garmentUrl;
-      // If the garment image is a raw base64 data URI, upload it to Firebase Storage as well!
-      if (garmentUrl.startsWith('data:')) {
-        const path = 'tryon-results';
-        const fileName = `${user.uid}_garment_${Date.now()}.jpg`;
-        const cleanB64 = garmentUrl.split('base64,')[1] || garmentUrl;
-        const storageRef = ref(storage, `${path}/${fileName}`);
-        await uploadString(storageRef, cleanB64, 'base64', { contentType: 'image/jpeg' });
-        finalGarmentUrl = await getDownloadURL(storageRef);
-        console.log('[AI] ✅ Uploaded custom garment to Storage:', finalGarmentUrl);
-      }
+        let finalGarmentUrl = garmentUrl;
+        if (garmentUrl.startsWith('data:')) {
+          const path = 'tryon-results';
+          const fileName = `${user.uid}_garment_${Date.now()}.jpg`;
+          const cleanB64 = garmentUrl.split('base64,')[1] || garmentUrl;
+          const storageRef = ref(storage, `${path}/${fileName}`);
+          await uploadString(storageRef, cleanB64, 'base64', { contentType: 'image/jpeg' });
+          finalGarmentUrl = await getDownloadURL(storageRef);
+        }
 
-      await addDoc(collection(firestore, 'tryon_results'), {
-        userId: user.uid,
-        title: desc || 'AI Outfit',
-        imageUrl: finalGarmentUrl,
-        tryOnImageUrl: finalTryOnUrl,
-        resultImageUrl: finalTryOnUrl,  // profile grid reads resultImageUrl || tryOnImageUrl
-        category: category || 'upper_body',
-        createdAt: serverTimestamp(),
-      });
-      console.log('[AI] ✅ Saved try-on result to Firestore tryon_results');
-    } catch (dbErr) {
-      console.error('[AI] Failed to write tryon result to Firestore:', dbErr);
-    }
+        await addDoc(collection(firestore, 'tryon_results'), {
+          userId: user.uid,
+          title: desc || 'AI Outfit',
+          imageUrl: finalGarmentUrl,
+          tryOnImageUrl: finalTryOnUrl,
+          resultImageUrl: finalTryOnUrl,
+          category: category || 'upper_body',
+          createdAt: serverTimestamp(),
+        });
+        console.log('[AI] ✅ Saved try-on result to Firestore (background)');
+      } catch (dbErr) {
+        console.error('[AI] Background save failed:', dbErr);
+      }
+    })();
   }
 
   if (user && firestore) {
@@ -512,10 +517,10 @@ async function _runVirtualTryOnImpl(humanInput, garmentUrl, desc, onStatus, forc
   }
 
   const [humanB64, garmentB64] = await Promise.all([
-    // Higher resolution for person photo → model sees face/body details clearly → less hallucination
-    getCleanBase64(actualHumanInput, 768, 960, 'fit', 0.85),
-    // Garment stays at 512x640 (flat-lay product shots don't need more)
-    getCleanBase64(garmentHttpUrl, 512, 640, 'fit', 0.80),
+    // Reduced to 384x512 (exact 3:4) to reduce pixel count by 40% for sub-5s generation speed
+    getCleanBase64(actualHumanInput, 384, 512, 'fit', 0.80),
+    // Garment matches 384x512 for faster upload and processing
+    getCleanBase64(garmentHttpUrl, 384, 512, 'fit', 0.80),
   ]);
 
   console.log(`[AI] Base64 — human: ${humanB64?.length || 0} chars, garment: ${garmentB64?.length || 0} chars`);
@@ -542,7 +547,7 @@ async function _runVirtualTryOnImpl(humanInput, garmentUrl, desc, onStatus, forc
           body: JSON.stringify(reqBody),
         });
         if (res.status === 429) { const e = new Error('Rate limit'); e.isRateLimit = true; throw e; }
-        
+
         const responseText = await res.text();
         let data;
         try { data = JSON.parse(responseText); } catch { throw new Error('Invalid JSON response'); }
@@ -555,7 +560,7 @@ async function _runVirtualTryOnImpl(humanInput, garmentUrl, desc, onStatus, forc
           }
           throw new Error(errMsg);
         }
-        
+
         const dataUri = extractImageFromResponse(data, 'Google AI Studio');
         if (dataUri) return dataUri;
       } catch (studioErr) {
@@ -609,17 +614,12 @@ async function _runVirtualTryOnImpl(humanInput, garmentUrl, desc, onStatus, forc
   };
 
   try {
-    const result = await withTimeout(runGen(false), 90000, 'Try-on');
-    if (isValidTryOnResult(result, garmentHttpUrl, humanB64)) {
+    const result = await withTimeout(runGen(false), 35000, 'Try-on');
+    if (isValidTryOnResult(result, garmentHttpUrl, humanB64, actualHumanInput)) {
       return result;
     }
-    // First attempt produced unchanged/invalid result — retry once with higher temperature
-    console.warn('[AI] First attempt invalid — retrying with temperature 0.3…');
-    const retry = await withTimeout(runGen(true), 60000, 'Try-on retry');
-    if (isValidTryOnResult(retry, garmentHttpUrl, humanB64)) {
-      return retry;
-    }
-    console.warn('[AI] Both attempts invalid — returning null');
+    // Result invalid — return null without retrying to avoid doubling wait time
+    console.warn('[AI] Attempt produced invalid result — returning null (no retry for speed)');
     return null;
   } catch (e) {
     console.error('[AI Pipeline Error]:', e.message);

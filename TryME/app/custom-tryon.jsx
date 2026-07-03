@@ -1,5 +1,5 @@
 /**
- * custom-tryon.jsx — TrialX AI
+ * custom-tryon.jsx — oraneo
  * Manual try-on generator accessible from Profile Settings.
  * User picks a garment image + uses their saved base photo → AI generates a try-on.
  */
@@ -332,7 +332,7 @@ export default function CustomTryOn() {
                 />
                 <View style={s.aiBadge}>
                   <Ionicons name="sparkles" size={11} color="#E8A882" />
-                  <Text style={s.aiBadgeText}>TrialX AI</Text>
+                  <Text style={s.aiBadgeText}>oraneo</Text>
                 </View>
                 <View style={s.resultActions}>
                   <Pressable

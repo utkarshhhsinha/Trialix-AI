@@ -1,5 +1,5 @@
 /**
- * Web Notifications Helper for TrialX AI
+ * Web Notifications Helper for oraneo
  */
 
 export async function requestNotificationPermission() {

@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "Trialix AI",
+    "name": "oraneo",
     "slug": "tryme",
     "version": "1.0.1",
     "orientation": "portrait",
@@ -49,6 +49,7 @@
         }
       ],
       "@react-native-google-signin/google-signin",
+      "react-native-image-marker",
       "expo-asset",
       [
         "expo-notifications",
@@ -61,8 +62,8 @@
       [
         "expo-media-library",
         {
-          "photosPermission": "Allow Trialix AI to access your photos.",
-          "savePhotosPermission": "Allow Trialix AI to save photos to your library."
+          "photosPermission": "Allow oraneo to access your photos.",
+          "savePhotosPermission": "Allow oraneo to save photos to your library."
         }
       ]
     ],

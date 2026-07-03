@@ -1,4 +1,4 @@
-// TrialX AI — Warm Pastel Design System
+// oraneo — Warm Pastel Design System
 // "Cozy · Classy · Fashion-forward"
 
 export const theme = {
@@ -124,7 +124,7 @@ export const theme = {
     'Finding your perfect fit…',
     'Matching your silhouette…',
     'Styling your energy…',
-    'TrialX AI is cooking…',
+    'oraneo is cooking…',
     'Your fit is loading.',
     'Aura syncing…',
     'Confidence calibration…',

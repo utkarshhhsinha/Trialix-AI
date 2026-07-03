@@ -21,14 +21,14 @@ export function mapCommunityPost(docSnap, likedByMe = false) {
   return {
     id: docSnap.id,
     userId: data.userId,
-    brand: data.brand || 'TrialX Brand',
+    brand: data.brand || 'oraneo Brand',
     garmentDesc: data.garmentDesc || 'Fashion Fit',
     resultImageUrl: data.resultImageUrl,
     garmentImageUrl: data.garmentImageUrl || data.resultImageUrl,
     userName: data.userName || `@user_${docSnap.id.slice(0, 4)}`,
     userPhotoUrl: data.userPhotoUrl || null,
     rank: data.rank || 'Style Rookie',
-    caption: data.caption || `Tried on ${data.garmentDesc || 'this look'} via TrialX AI!`,
+    caption: data.caption || `Tried on ${data.garmentDesc || 'this look'} via oraneo!`,
     likes: Math.max(0, data.likes || 0), // guard against negative
     commentsCount: data.commentsCount || 0,
     buyLink: data.buyLink || '',

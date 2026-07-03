@@ -1,5 +1,5 @@
 /**
- * ai_engine.js — TrialX AI Engine (v31.0)
+ * ai_engine.js — oraneo Engine (v31.0)
  * Primary:  Nano Banana (gemini-2.5-flash-image) via Vertex AI — called directly from client
  *           using EXPO_PUBLIC_FIREBASE_API_KEY (no Cloud Run IAM issues)
  * Fallback: Firebase Cloud Function generateTryOn (same model, server-side)
@@ -299,6 +299,7 @@ WHAT THE FINAL IMAGE MUST SHOW (✓ = required):
 ✓ The COMPLETE garment from Image 2 — every colour, print, button, embroidery detail — fitted naturally on the body
 ✓ Full garment visible from shoulder/waist to hem — not cropped
 ✓ Bare arms and skin: If the garment in Image 2 is sleeveless, short-sleeved, off-shoulder, or strapless, you MUST completely erase the original long sleeves from the arms and render natural, clean bare skin (arms/shoulders/collarbones).
+✓ WATERMARK: In the bottom right corner of the image, add a clean, small, semi-transparent white text watermark that reads "styled by 🔍 oraneo" so the user can see it but also crop the image if needed.
 
 WHAT MUST NOT APPEAR IN THE OUTPUT (✗ = forbidden):
 ✗ Any ${stripList} from the original Image 1 — not even partially, not peeking out, not visible underneath
@@ -481,7 +482,62 @@ export async function runVirtualTryOn(humanInput, garmentUrl, desc, onStatus, fo
   }
 
   // Actually run the try-on implementation
-  const result = await enqueueTryOn(() => _runVirtualTryOnImpl(humanInput, garmentUrl, desc, onStatus, forceGemini, category, fast));
+  let result = await enqueueTryOn(() => _runVirtualTryOnImpl(humanInput, garmentUrl, desc, onStatus, forceGemini, category, fast));
+
+  // Apply watermark to the result image on mobile
+  if (result) {
+    try {
+      const MarkerModule = require('react-native-image-marker');
+      const Marker = MarkerModule.default || MarkerModule;
+      const { Position, ImageFormat } = MarkerModule;
+
+      let imageWidth = 1080;
+      try {
+        const info = await ImageManipulator.manipulateAsync(result, []);
+        if (info.width) imageWidth = info.width;
+      } catch (e) {
+        console.warn('[AI] Failed to get image dimensions for watermark:', e.message);
+      }
+
+      const fontSize = Math.max(16, Math.min(48, Math.round(imageWidth * 0.03)));
+
+      const markedUri = await Marker.markText({
+        backgroundImage: {
+          src: result,
+        },
+        watermarkTexts: [
+          {
+            text: 'styled by 🔍 oraneo',
+            position: {
+              position: Position.bottomRight,
+            },
+            style: {
+              color: '#FFFFFF',
+              fontSize: fontSize,
+              fontName: 'Arial-BoldMT',
+              shadowStyle: {
+                dx: Math.max(1, Math.round(fontSize * 0.06)),
+                dy: Math.max(1, Math.round(fontSize * 0.06)),
+                radius: Math.max(2, Math.round(fontSize * 0.12)),
+                color: '#000000',
+              },
+            },
+          },
+        ],
+        saveFormat: ImageFormat.jpeg,
+        quality: 95,
+      });
+
+      // Delete the un-watermarked temp file if needed
+      if (result !== markedUri && result.startsWith('file://') && result.includes(FileSystem.cacheDirectory)) {
+        FileSystem.deleteAsync(result, { idempotent: true }).catch(() => { });
+      }
+      result = markedUri;
+      console.log('[AI] ✅ Watermarked image during generation:', result);
+    } catch (err) {
+      console.warn('[AI] Failed to apply watermark to generated image:', err.message);
+    }
+  }
 
   // Increment tryOnCountToday after successful generation
   if (user && firestore) {

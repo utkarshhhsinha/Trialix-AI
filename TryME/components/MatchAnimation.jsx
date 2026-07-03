@@ -1,5 +1,5 @@
 /**
- * MatchAnimation.jsx — TrialX AI
+ * MatchAnimation.jsx — oraneo
  * ─────────────────────────────────────
  * Full-screen "IT'S A MATCH" overlay after right swipe.
  * Tinder-inspired with dark luxury aesthetic.

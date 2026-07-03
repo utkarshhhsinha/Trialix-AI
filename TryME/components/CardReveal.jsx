@@ -1,10 +1,10 @@
 /**
- * CardReveal.jsx — TrialX AI
+ * CardReveal.jsx — oraneo
  *
  * Displays the try-on image for a swipe card:
  *  - While tryOnImageUrl is null: shows the garment placeholder image
  *  - When tryOnImageUrl first arrives (null → URL): fades in the try-on image
- *    over the placeholder with a brief TrialX logo flash
+ *    over the placeholder with a brief oraneo logo flash
  *  - If tryOnImageUrl is already set on mount: shows it immediately, no animation
  *
  * Kept intentionally simple so it works reliably on all cards in the stack,
@@ -93,7 +93,7 @@ export default function CardReveal({ tryOnImageUrl, placeholderSource, style }) 
         <Animated.View style={[styles.logoOverlay, { opacity: logoOpacity }]}>
           <Image source={LOGO} style={styles.logoImg} resizeMode="contain" />
           <Text style={styles.logoLabel}>
-            TrialX<Text style={styles.logoAI}>AI</Text>
+            oraneo
           </Text>
           <Text style={styles.logoSub}>Your look is ready ✨</Text>
         </Animated.View>

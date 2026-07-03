@@ -75,6 +75,10 @@ body {
     background-color: #000000;
   }
 
+  .main-content.full-screen-content {
+    margin-left: 0;
+  }
+
   .main-content > div {
     width: 100%;
     max-width: 100%;
@@ -374,4 +378,9 @@ body {
 @keyframes bounceHeart {
   0%, 100% { transform: scale(1); }
   50% { transform: scale(1.18); }
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% -200%; }
+  100% { background-position: 200% 200%; }
 }

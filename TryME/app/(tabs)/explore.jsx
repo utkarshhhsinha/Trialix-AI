@@ -1,5 +1,5 @@
 /**
- * explore.jsx — TrialX AI
+ * explore.jsx — oraneo
  * Pinterest-style fashion exploration grid.
  * Trending picks, Spotify-style mood collections, Instagram search.
  */

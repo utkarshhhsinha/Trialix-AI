@@ -19,7 +19,7 @@ import { GoogleSignin, statusCodes } from '@react-native-google-signin/google-si
 import { firebaseAuth } from '@/lib/firebase';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import TrialixLogo from '@/components/TrialixLogo';
+import OraneoLogo from '@/components/OraneoLogo';
 
 const { width: W, height: H } = Dimensions.get('window');
 
@@ -130,8 +130,8 @@ export default function Login() {
           >
             {/* Hero — logo + wordmark */}
             <View style={styles.hero}>
-              <TrialixLogo size={96} />
-              <Text style={styles.wordmark}>Trialix</Text>
+              <OraneoLogo size={96} />
+              <Text style={styles.wordmark}>oraneo</Text>
               <Text style={styles.tagline}>Swipe. Try. Slay.</Text>
               <Text style={styles.subtag}>AI virtual try-on — see any outfit on you</Text>
             </View>

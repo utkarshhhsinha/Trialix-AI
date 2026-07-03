@@ -331,7 +331,7 @@ export default function Profile({ onOpenCustomTryOn }) {
                 position: 'absolute', bottom: 0, left: 0, right: 0, padding: '12px',
                 background: 'linear-gradient(to top, rgba(0,0,0,0.8) 0%, transparent 100%)', color: 'white'
               }}>
-                <span style={{ fontSize: '9px', fontWeight: '800', opacity: 0.9, letterSpacing: '0.5px' }}>{item.brand || 'TrialX Brand'}</span>
+                <span style={{ fontSize: '9px', fontWeight: '800', opacity: 0.9, letterSpacing: '0.5px' }}>{item.brand || 'oraneo Brand'}</span>
                 <h5 style={{ fontSize: '12px', fontWeight: '800', marginTop: '1px' }}>{item.garmentDesc || item.title || 'Outfit'}</h5>
               </div>
             </div>

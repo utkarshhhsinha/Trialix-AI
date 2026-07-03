@@ -47,7 +47,7 @@ export default function TrialRoomModal({ item, user, profile, onClose }) {
         item.category || 'upper_body'
       );
       setResultImage(result);
-      sendWebNotification('Your AI Look is Ready! ✨', `Trialix AI successfully fitted "${item.title}".`);
+      sendWebNotification('Your AI Look is Ready! ✨', `oraneo successfully fitted "${item.title}".`);
     } catch (err) {
       setError(err.message || 'AI fitting failed. Please try again.');
     } finally {

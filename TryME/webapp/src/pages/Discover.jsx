@@ -6,7 +6,7 @@ import { firebaseAuth, firestore, firebaseFunctions, storage } from '../lib/fire
 import { signOut } from 'firebase/auth';
 import { runVirtualTryOn } from '../lib/ai_engine';
 import { httpsCallable } from 'firebase/functions';
-import { collection, addDoc, serverTimestamp, doc, onSnapshot, updateDoc, increment, setDoc, getDoc, query, where, orderBy, limit } from 'firebase/firestore';
+import { collection, addDoc, serverTimestamp, doc, onSnapshot, updateDoc, increment, setDoc, getDoc, getDocs, query, where, orderBy, limit } from 'firebase/firestore';
 import { ref, uploadString, getDownloadURL } from 'firebase/storage';
 import { sendWebNotification, requestNotificationPermission } from '../lib/notifications';
 import theme from '../theme';
@@ -17,33 +17,67 @@ import { incrementProfileStats } from '../lib/community';
 const APP_DOWNLOAD_URL = 'https://expo.dev/accounts/ascendras-organization/projects/tryme/builds/c67c614b-a2f8-4a17-aad9-71acb0169425';
 const QR_API_URL = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&color=000000&bgcolor=FFFFFF&data=${encodeURIComponent(APP_DOWNLOAD_URL)}`;
 
+// ────────────────────────────────────────────────────────────────────
+// Module-level session cache — survives component unmount/remount (tab switching)
+// This is the key fix: React useRefs reset on remount, but module vars don't
+// ────────────────────────────────────────────────────────────────────
+const _session = {
+  batchId: null,       // last loaded batch ID
+  picks: null,         // last loaded picks array with generated images
+  currentIndex: 0,     // card the user was viewing
+  isProcessing: false, // whether generation is currently running
+  inFlight: new Set(), // which card indices are in-flight
+};
+
 export default function Discover({ profile, onOpenTrialRoom, onOpenCustomTryOn }) {
   const user = firebaseAuth?.currentUser;
-  const [picks, setPicks] = useState([]);
-  const [currentIndex, setCurrentIndex] = useState(0);
+
+  // Restore from session cache immediately (prevents blank state on nav back)
+  const [picks, setPicks] = useState(() => _session.picks || []);
+  const [currentIndex, setCurrentIndex] = useState(() => _session.currentIndex || 0);
   const [showDoneModal, setShowDoneModal] = useState(false);
   const [nextBatchAt, setNextBatchAt] = useState(null);
   const [countdownSecs, setCountdownSecs] = useState(300);
   const [generating, setGenerating] = useState(false);
-  const [initialLoading, setInitialLoading] = useState(true);
+  // If session has picks already, skip loading screen immediately
+  const [initialLoading, setInitialLoading] = useState(!_session.picks || _session.picks.length === 0);
   const [notifEnabled, setNotifEnabled] = useState(false);
   const [showMatch, setShowMatch] = useState(false);
   const [matchedItem, setMatchedItem] = useState(null);
-  const [postingId, setPostingId] = useState(null); // item id currently being posted
-  const [showAppDownload, setShowAppDownload] = useState(false); // QR + link modal
-  const [recentTryOnUrl, setRecentTryOnUrl] = useState(null); // most recent try-on image from profile
+  const [postingId, setPostingId] = useState(null);
+  const [showAppDownload, setShowAppDownload] = useState(false);
+  const [recentTryOnUrl, setRecentTryOnUrl] = useState(null);
   const [cachedUserB64, setCachedUserB64] = useState(null);
 
   const countdownRef = useRef(null);
-  // Guard: prevents re-triggering processAIClassifications on every Firestore update
-  // (seenAt/nextBatchAt writes fire the snapshot but should NOT restart generation)
+  // Point refs at the module-level session vars so they survive remounts
   const isProcessingRef = useRef(false);
-  const currentBatchIdRef = useRef(null);
-  const inFlightRef = useRef(new Set()); // tracks which card indices are currently in-flight
+  const currentBatchIdRef = useRef(_session.batchId); // restore from session!
+  const inFlightRef = useRef(_session.inFlight);      // restore from session!
+
+  // Keep session cache in sync whenever picks or currentIndex change
+  useEffect(() => { _session.picks = picks; }, [picks]);
+  useEffect(() => { _session.currentIndex = currentIndex; }, [currentIndex]);
 
   useEffect(() => {
     requestNotificationPermission().then(granted => setNotifEnabled(granted));
   }, []);
+
+  // Automatic calendar-day reset of the daily try-on limit
+  useEffect(() => {
+    if (!user || !firestore || !profile) return;
+    const lastReset = profile.tryOnLastResetTime || 0;
+    const isNewDay = new Date(lastReset).toDateString() !== new Date().toDateString();
+    if (isNewDay) {
+      console.log('[Discover] New calendar day detected. Resetting profile daily limit...');
+      const profileRef = doc(firestore, 'profiles', user.uid);
+      updateDoc(profileRef, {
+        tryOnCountToday: 0,
+        tryOnLastResetTime: Date.now(),
+        tryOnBlockedUntil: null
+      }).catch(err => console.warn('[Discover] Reset daily limit failed:', err.message));
+    }
+  }, [profile, user]);
 
   // Fetch user's most recent try-on result from profile database
   useEffect(() => {
@@ -77,23 +111,13 @@ export default function Discover({ profile, onOpenTrialRoom, onOpenCustomTryOn }
     };
   }, []);
 
-  // Pre-fetch user photo base64 at the SAME resolution used by the AI engine (768x960)
+  // Pre-fetch user photo base64 at the SAME resolution used by the AI engine (384x512)
   useEffect(() => {
     if (!profile?.basePhotoUrl) return;
     const fetchUserB64 = async () => {
       try {
         const { getCleanBase64 } = await import('../lib/ai_engine');
-        // Bust old low-res cache entries so AI engine always gets 768x960 quality
-        try {
-          const oldKey = `b64_${profile.basePhotoUrl}`;
-          const cached = localStorage.getItem(oldKey);
-          if (cached && cached.length < 200000) {
-            // Old cache is low-res (< 200kb base64) — clear it so we re-fetch at high res
-            localStorage.removeItem(oldKey);
-            console.log('[AI] Busted stale low-res user photo cache');
-          }
-        } catch (_) {}
-        const b64 = await getCleanBase64(profile.basePhotoUrl, 768, 960, 'fit', 0.85);
+        const b64 = await getCleanBase64(profile.basePhotoUrl, 384, 512, 'fit', 0.80);
         if (b64) setCachedUserB64(`data:image/jpeg;base64,${b64}`);
       } catch (e) {
         console.warn('[AI] User photo pre-fetch failed:', e.message);
@@ -131,6 +155,8 @@ export default function Discover({ profile, onOpenTrialRoom, onOpenCustomTryOn }
       );
       const isReal = url && url !== item.imageUrl;
       inFlightRef.current.delete(idx);
+      
+      // 1. Show image immediately in UI (data URI for instant display)
       setPicks(prev => prev.map((pick, i) =>
         i === idx ? {
           ...pick,
@@ -138,6 +164,86 @@ export default function Discover({ profile, onOpenTrialRoom, onOpenCustomTryOn }
           generationStatus: isReal ? 'success' : 'failed'
         } : pick
       ));
+
+      // 2. Upload data URI to Firebase Storage in background, then save the
+      //    short Storage URL to Firestore daily_picks (avoids 1MB doc limit)
+      if (isReal && user && firestore && storage && url?.startsWith('data:')) {
+        (async () => {
+          try {
+            const fileName = `${user.uid}_card${idx}_${Date.now()}.jpg`;
+            const sRef = ref(storage, `daily-picks/${fileName}`);
+            const cleanB64 = url.split('base64,')[1] || url;
+            await uploadString(sRef, cleanB64, 'base64', { contentType: 'image/jpeg' });
+            const storageUrl = await getDownloadURL(sRef);
+            console.log(`[Discover] ✅ Card ${idx} uploaded to Storage:`, storageUrl);
+
+            // Update picks state to use Storage URL (more stable than data URI)
+            setPicks(prev => prev.map((pick, i) =>
+              i === idx ? { ...pick, tryOnImageUrl: storageUrl } : pick
+            ));
+
+            // Save short Storage URL to Firestore daily_picks (safe, < 500 bytes per card)
+            const docRef = doc(firestore, 'daily_picks', user.uid);
+            const snap = await getDoc(docRef);
+            if (snap.exists()) {
+              const data = snap.data();
+              const dbPicks = Array.isArray(data.picks) ? [...data.picks] : [];
+              if (dbPicks[idx]) {
+                dbPicks[idx] = { ...dbPicks[idx], tryOnImageUrl: storageUrl };
+                await updateDoc(docRef, { picks: dbPicks });
+                console.log(`[Discover] ✅ Card ${idx} Storage URL saved to Firestore`);
+              }
+            }
+
+            // Auto-update wishlist item if already swiped right
+            const qWish = query(
+              collection(firestore, 'wishlist'),
+              where('userId', '==', user.uid),
+              where('title', '==', item.title)
+            );
+            const snapWish = await getDocs(qWish);
+            if (!snapWish.empty) {
+              const docRefWish = doc(firestore, 'wishlist', snapWish.docs[0].id);
+              await updateDoc(docRefWish, { tryOnImageUrl: storageUrl }).catch(() => {});
+              console.log(`[Discover] ✅ Updated tryOnImageUrl in wishlist doc for "${item.title}"`);
+            }
+          } catch (uploadErr) {
+            console.warn(`[Discover] Card ${idx} Storage upload failed:`, uploadErr.message);
+          }
+        })();
+      } else if (isReal && user && firestore && url && !url.startsWith('data:')) {
+        // URL is already a Storage/HTTP URL — save it directly  
+        (async () => {
+          try {
+            const docRef = doc(firestore, 'daily_picks', user.uid);
+            const snap = await getDoc(docRef);
+            if (snap.exists()) {
+              const data = snap.data();
+              const dbPicks = Array.isArray(data.picks) ? [...data.picks] : [];
+              if (dbPicks[idx]) {
+                dbPicks[idx] = { ...dbPicks[idx], tryOnImageUrl: url };
+                await updateDoc(docRef, { picks: dbPicks });
+              }
+            }
+
+            // Auto-update wishlist item if already swiped right
+            const qWish = query(
+              collection(firestore, 'wishlist'),
+              where('userId', '==', user.uid),
+              where('title', '==', item.title)
+            );
+            const snapWish = await getDocs(qWish);
+            if (!snapWish.empty) {
+              const docRefWish = doc(firestore, 'wishlist', snapWish.docs[0].id);
+              await updateDoc(docRefWish, { tryOnImageUrl: url }).catch(() => {});
+              console.log(`[Discover] ✅ Updated tryOnImageUrl in wishlist doc for "${item.title}"`);
+            }
+          } catch (err) {
+            console.warn('[Discover] Failed to save Storage URL to Firestore:', err.message);
+          }
+        })();
+      }
+
     } catch (err) {
       console.warn(`[AI] Card ${idx} generation failed:`, err);
       inFlightRef.current.delete(idx);
@@ -152,26 +258,62 @@ export default function Discover({ profile, onOpenTrialRoom, onOpenCustomTryOn }
     if (!itemsList || itemsList.length === 0) return itemsList;
     if (isProcessingRef.current && currentBatchIdRef.current === batchId) return itemsList;
 
+    // If session cache already has this exact batch with generated images, restore and skip
+    if (_session.batchId === batchId && _session.picks && _session.picks.length > 0) {
+      const sessionHasImages = _session.picks.some(p => p.tryOnImageUrl && p.generationStatus === 'success');
+      if (sessionHasImages) {
+        console.log('[Discover] Session cache hit — restoring picks without regeneration.');
+        currentBatchIdRef.current = batchId;
+        setPicks(_session.picks);
+        setCurrentIndex(_session.currentIndex);
+        setInitialLoading(false);
+        return _session.picks;
+      }
+    }
+
+    // If ALL picks already have generated images (loaded from Firestore), skip generation
+    const allAlreadyGenerated = itemsList.every(item =>
+      item.tryOnImageUrl && (item.generationStatus === 'success' || item.generationStatus === 'failed')
+    );
+
+    if (allAlreadyGenerated) {
+      console.log('[Discover] All picks already generated — skipping generation, showing cached images.');
+      currentBatchIdRef.current = batchId;
+      _session.batchId = batchId;  // sync to session
+      setInitialLoading(false);
+      return itemsList;
+    }
+
     isProcessingRef.current = true;
     currentBatchIdRef.current = batchId;
-    inFlightRef.current.clear(); // reset for new batch
+    _session.batchId = batchId; // sync to session so remounts skip generation
+    inFlightRef.current.clear();
     setInitialLoading(true);
+    
+    // Process card 0 first synchronously to show the deck ASAP
+    const item0 = itemsList[0];
+    if (item0 && (!item0.tryOnImageUrl || (item0.generationStatus !== 'success' && item0.generationStatus !== 'failed'))) {
+      await generateTryOnForCard(0, itemsList);
+      sendWebNotification('First outfit ready! ✨', 'Your first AI fit is ready to view.');
+    }
 
+    setInitialLoading(false);
+    isProcessingRef.current = false;
 
-    // Hard cap: dismiss loading overlay after 8s regardless
-    const overlayTimer = setTimeout(() => setInitialLoading(false), 8000);
+    // Process remaining cards sequentially in background to avoid concurrent rate limits
+    (async () => {
+      for (let i = 1; i < itemsList.length; i++) {
+        const item = itemsList[i];
+        if (item && (!item.tryOnImageUrl || (item.generationStatus !== 'success' && item.generationStatus !== 'failed'))) {
+          try {
+            await generateTryOnForCard(i, itemsList);
+          } catch (e) {
+            console.warn(`[Discover] Sequential background generation failed for card ${i}:`, e.message);
+          }
+        }
+      }
+    })();
 
-    // Fire all 3 generations in parallel
-    const generationPromises = itemsList.map((_, idx) => generateTryOnForCard(idx, itemsList));
-
-    // Show deck as soon as card 0 is resolved (success or fail)
-    generationPromises[0].then(() => {
-      clearTimeout(overlayTimer);
-      setInitialLoading(false);
-      isProcessingRef.current = false;
-    });
-
-    // Cards 1 & 2 continue in background — no await needed here
     return itemsList;
   };
 
@@ -186,6 +328,42 @@ export default function Discover({ profile, onOpenTrialRoom, onOpenCustomTryOn }
         return;
       }
       const data = snap.data();
+      const currentPhoto = profile?.basePhotoUrl || null;
+      const dbPhoto = data.generatedWithPhotoUrl || null;
+
+      // Invalidate generated images if base photo changed
+      if (currentPhoto && dbPhoto && dbPhoto !== currentPhoto) {
+        console.log('[Discover] Base photo changed. Invalidating generated images to force regeneration.');
+        // Wipe session cache
+        _session.picks = null;
+        _session.batchId = null;
+        
+        let rawPicks = [];
+        if (Array.isArray(data.picks)) {
+          rawPicks = data.picks;
+        } else if (data.picks && typeof data.picks === 'object') {
+          rawPicks = Object.keys(data.picks).sort((a, b) => Number(a) - Number(b)).map(k => data.picks[k]);
+        }
+        
+        const clearedPicks = rawPicks.map(p => ({
+          id: p.id,
+          tryOnImageUrl: null
+        }));
+
+        updateDoc(doc(firestore, 'daily_picks', user.uid), {
+          picks: clearedPicks,
+          generatedWithPhotoUrl: currentPhoto
+        }).catch(err => console.warn('[Discover] Failed to invalidate pics:', err));
+        return;
+      }
+
+      // Initialize generatedWithPhotoUrl if missing
+      if (currentPhoto && !dbPhoto) {
+        updateDoc(doc(firestore, 'daily_picks', user.uid), {
+          generatedWithPhotoUrl: currentPhoto
+        }).catch(() => {});
+      }
+
       let rawPicks = [];
       if (Array.isArray(data.picks)) {
         rawPicks = data.picks;
@@ -217,26 +395,41 @@ export default function Discover({ profile, onOpenTrialRoom, onOpenCustomTryOn }
         // Build a stable batch ID from the pick IDs so we can detect new batches vs. metadata-only updates
         const batchId = rawPicks.map(p => p.id).join(',');
 
-        // Skip if we've already loaded or are processing this exact batch ID
-        if (currentBatchIdRef.current === batchId) return;
-
-
         const localCatalog = getCatalogByGender(profile?.gender);
         const resolvedPicks = rawPicks.map((p, idx) => {
           const match = localCatalog.find(c => c.id === p.id);
-          // Always ignore any previously stored tryOnImageUrl and regenerate fresh.
+          
+          // Merge with session cache to avoid overwriting generated images on tab switches
+          let cachedUrl = null;
+          let cachedStatus = null;
+          if (_session.batchId === batchId && _session.picks) {
+            const cachedPick = _session.picks.find(cp => cp.id === p.id);
+            if (cachedPick) {
+              cachedUrl = cachedPick.tryOnImageUrl;
+              cachedStatus = cachedPick.generationStatus;
+            }
+          }
+
+          // Ignore p.tryOnImageUrl from Firestore to always generate fresh images instead of loading stale/failed database records.
+          // We still use cachedUrl so browser session tab-switching is instant and doesn't regenerate.
+          const tryOnImageUrl = cachedUrl || null;
           const pickData = match
-            ? { ...p, imageUrl: match.imageUrl, tryOnImageUrl: null, brand: match.brand, title: match.title, priceINR: match.priceINR, buyLink: match.buyLink || '', category: match.category || 'upper_body', gender: match.gender }
-            : { ...p, tryOnImageUrl: null };
+            ? { ...p, imageUrl: match.imageUrl, tryOnImageUrl, brand: match.brand, title: match.title, priceINR: match.priceINR, buyLink: match.buyLink || '', category: match.category || 'upper_body', gender: match.gender }
+            : { ...p, tryOnImageUrl };
+            
+          const hasImage = !!tryOnImageUrl;
           return {
             ...pickData,
-            // Card 0 is 'pending' (will start generating immediately).
-            // Cards 1+ are 'queued' — show garment image cleanly while waiting their turn.
-            generationStatus: idx === 0 ? 'pending' : 'queued'
+            generationStatus: hasImage ? 'success' : (cachedStatus || (idx === 0 ? 'pending' : 'queued'))
           };
         });
+
         setPicks(resolvedPicks);
-        setCurrentIndex(0);
+        // Only reset to card 0 if this is a genuinely new batch
+        if (currentBatchIdRef.current !== batchId) {
+          setCurrentIndex(0);
+          _session.currentIndex = 0;
+        }
         processAIClassifications(resolvedPicks, batchId);
       } else {
         loadGenderCatalog();
@@ -263,7 +456,8 @@ export default function Discover({ profile, onOpenTrialRoom, onOpenCustomTryOn }
         status: 'ready',
         picks: initialPicks,
         seenAt: null,
-        nextBatchAt: null
+        nextBatchAt: null,
+        generatedWithPhotoUrl: profile?.basePhotoUrl || null
       }).catch(err => console.warn('[Discover] loadGenderCatalog setDoc failed:', err));
     }
   };
@@ -382,11 +576,11 @@ export default function Discover({ profile, onOpenTrialRoom, onOpenCustomTryOn }
         userName: profile?.name || user.displayName || '@fashionista',
         userPhotoUrl: profile?.basePhotoUrl || user.photoURL || null,
         rank: profile?.rank || 'Style Rookie',
-        brand: item.brand || 'TrialX Brand',
+        brand: item.brand || 'oraneo Brand',
         garmentDesc: item.title || 'Outfit',
         resultImageUrl: imageUrl,
         garmentImageUrl: item.imageUrl,
-        caption: `Just tried on "${item.title}" via TrialX AI! 🔥`,
+        caption: `Just tried on "${item.title}" via oraneo! 🔥`,
         buyLink: item.buyLink || '',
         likes: 0,
         commentsCount: 0,
@@ -396,7 +590,7 @@ export default function Discover({ profile, onOpenTrialRoom, onOpenCustomTryOn }
       // 2. Save to tryon_results so it shows on Profile > Try-Ons tab
       await addDoc(collection(firestore, 'tryon_results'), {
         userId: user.uid,
-        brand: item.brand || 'TrialX Brand',
+        brand: item.brand || 'oraneo Brand',
         garmentDesc: item.title || 'Outfit',
         resultImageUrl: imageUrl,
         tryOnImageUrl: imageUrl,
@@ -689,7 +883,7 @@ export default function Discover({ profile, onOpenTrialRoom, onOpenCustomTryOn }
 
         {/* Brand Title */}
         <h1 style={{ fontFamily: 'Outfit, sans-serif', fontSize: '22px', fontWeight: '900', letterSpacing: '-0.5px' }}>
-          TrialX<span style={{ color: theme.colors.primary }}>AI</span>
+          oraneo
         </h1>
 
         {/* Action Controls */}
@@ -824,7 +1018,7 @@ export default function Discover({ profile, onOpenTrialRoom, onOpenCustomTryOn }
 
                 <div style={{ fontSize: '32px', marginBottom: '8px' }}>📱</div>
                 <h3 style={{ fontSize: '20px', fontWeight: '900', color: 'white', marginBottom: '4px', fontFamily: 'Outfit, sans-serif' }}>
-                  Download TrialX AI
+                  Download oraneo
                 </h3>
                 <p style={{ fontSize: '13px', color: 'rgba(255,255,255,0.5)', marginBottom: '24px' }}>
                   Scan QR or tap the button to get the app

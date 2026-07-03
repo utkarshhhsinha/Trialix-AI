@@ -72,7 +72,7 @@ export default function ProfileSetup() {
         Setup Your Style Profile 👗
       </h2>
       <p style={{ color: theme.colors.textMuted, fontSize: '14px', marginBottom: '24px' }}>
-        Upload your photo so TrialX AI can fit clothing perfectly on your body
+        Upload your photo so oraneo can fit clothing perfectly on your body
       </p>
 
       {/* Full Body Warning Tip */}

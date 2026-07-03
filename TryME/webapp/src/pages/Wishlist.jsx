@@ -91,7 +91,7 @@ export default function Wishlist() {
                     position: 'absolute', top: 10, left: 10, background: theme.colors.primary, color: 'white',
                     padding: '4px 10px', borderRadius: '12px', fontSize: '11px', fontWeight: '800', display: 'flex', alignItems: 'center', gap: '4px'
                   }}>
-                    <Sparkles size={11} /> Trialix AI
+                    <Sparkles size={11} /> oraneo
                   </div>
                 )}
 
@@ -107,7 +107,7 @@ export default function Wishlist() {
 
               {/* Content info */}
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ fontSize: '11px', fontWeight: '800', color: theme.colors.primary, textTransform: 'uppercase' }}>{item.brand || 'TrialX Brand'}</span>
+                <span style={{ fontSize: '11px', fontWeight: '800', color: theme.colors.primary, textTransform: 'uppercase' }}>{item.brand || 'oraneo Brand'}</span>
                 <Trash2 size={15} color="#FF3B30" style={{ cursor: 'pointer' }} onClick={() => removeItem(item.id)} />
               </div>
 

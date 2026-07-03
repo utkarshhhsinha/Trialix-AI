@@ -1,12 +1,12 @@
 /**
- * Trialix AI — brand mark (uses same asset as home-screen app icon)
+ * Oraneo — brand mark (uses same asset as home-screen app icon)
  */
 import React from 'react';
 import { View, StyleSheet, Image } from 'react-native';
 
 const APP_ICON = require('@/assets/images/icon.png');
 
-export default function TrialixLogo({ size = 88, showRing = true }) {
+export default function OraneoLogo({ size = 88, showRing = true }) {
   const radius = showRing ? size * 0.22 : size * 0.2;
   return (
     <View

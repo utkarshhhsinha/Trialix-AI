@@ -1,5 +1,5 @@
 /**
- * AIGenerationScreen.jsx — TrialX AI
+ * AIGenerationScreen.jsx — oraneo
  * ─────────────────────────────────────────────
  * Cinematic Speedtest-style AI try-on loader.
  * Circular glow ring + rotating particles + animated copy.
@@ -172,7 +172,7 @@ export default function AIGenerationScreen({ visible, garment }) {
         <OrbitDot radius={RING_SIZE * 0.35} color="#FE3C72" size={4} duration={2200} delay={1100} />
         <OrbitDot radius={RING_SIZE * 0.25} color="#A855F7" size={6} duration={1800} />
 
-        {/* Center: TrialX logo / garment thumb */}
+        {/* Center: oraneo logo / garment thumb */}
         <View style={styles.centerCircle}>
           <LinearGradient
             colors={['#1E1E1E', '#2D2D2D']}
@@ -182,8 +182,8 @@ export default function AIGenerationScreen({ visible, garment }) {
             <Image source={{ uri: garment.imageUrl }} style={styles.centerImg} />
           ) : (
             <>
-              <Text style={styles.centerLogoText}>T</Text>
-              <Text style={styles.centerLogoSub}>TrialX</Text>
+              <Text style={styles.centerLogoText}>O</Text>
+              <Text style={styles.centerLogoSub}>oraneo</Text>
             </>
           )}
           {/* Pink glow border */}
@@ -221,7 +221,7 @@ export default function AIGenerationScreen({ visible, garment }) {
       </View>
 
       {/* Bottom label */}
-      <Text style={styles.poweredBy}>Powered by TrialX AI  ✦</Text>
+      <Text style={styles.poweredBy}>Powered by oraneo  ✦</Text>
     </Animated.View>
   );
 }

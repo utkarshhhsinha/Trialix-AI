@@ -297,7 +297,7 @@ export default function TrialRoom() {
               />
               {/* AI badge */}
               <View style={styles.aiBadge}>
-                <Text style={styles.aiBadgeText}>✨ Trialix AI</Text>
+                <Text style={styles.aiBadgeText}>✨ oraneo</Text>
               </View>
 
               {/* Download + Buy row overlaid at bottom */}

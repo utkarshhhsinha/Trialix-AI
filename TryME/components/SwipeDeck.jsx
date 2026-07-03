@@ -1,5 +1,5 @@
 /**
- * SwipeDeck.jsx — TrialX AI v5.0
+ * SwipeDeck.jsx — oraneo v5.0
  * Tinder-style card deck with:
  * - Swipe RIGHT → match (onSwipeRight)
  * - Swipe LEFT  → skip (onSwipeLeft)

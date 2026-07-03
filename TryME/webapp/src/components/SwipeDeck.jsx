@@ -47,6 +47,7 @@ export default function SwipeDeck({
   onPost
 }) {
   const [, forceUpdate] = useState(0);
+  const [flyOff, setFlyOff] = useState(null); // null | 'right' | 'left'
   const currentItem = items[currentIndex];
   const prevTryOnUrl = useRef(currentItem?.tryOnImageUrl);
 
@@ -66,9 +67,10 @@ export default function SwipeDeck({
     }
   }, [items, currentIndex]);
 
-  // Reset drag when card changes
+  // Reset drag AND flyOff when card changes
   useEffect(() => {
     setDrag({ x: 0, y: 0, active: false });
+    setFlyOff(null);
   }, [currentIndex]);
 
   if (!items || items.length === 0 || currentIndex >= items.length || !currentItem) {
@@ -80,17 +82,12 @@ export default function SwipeDeck({
   const isRealTryOn = tryOnUrl && tryOnUrl !== currentItem.imageUrl;
   const status = currentItem.generationStatus; // 'pending' | 'queued' | 'success' | 'failed'
 
-  // isGenerating = true ONLY while actively generating (pending).
-  // 'queued' cards are waiting their turn — show clean garment image, no spinner.
-  // 'failed' and 'success' both end the generating state immediately.
+  // isGenerating = true while card is actively pending
   const isGenerating = status === 'pending';
 
-  // During generation (pending) → user's own photo (personalised preview while waiting)
-  // Queued / failed       → garment catalog photo (clean product image)
-  // After success         → AI try-on result
-  const displayImage = isGenerating
-    ? (userPhotoUrl || currentItem.imageUrl)   // user photo while AI is working
-    : (isRealTryOn ? tryOnUrl : currentItem.imageUrl); // AI result or clean garment photo
+  // Base layer is ALWAYS the user's own photo — never the garment catalog photo
+  // This prevents the garment image from ever flashing on screen
+  const baseImage = userPhotoUrl || currentItem.imageUrl;
 
   // ── Swipe indicator derived values ──────────────────────────────
   const dragPct = Math.min(Math.abs(drag.x) / SWIPE_THRESHOLD, 1);
@@ -116,11 +113,24 @@ export default function SwipeDeck({
   const onPointerUp = () => {
     if (!drag.active) return;
     const finalX = drag.x;
-    setDrag({ x: 0, y: 0, active: false });
     if (finalX > SWIPE_THRESHOLD) {
-      onSwipeRight?.(); // drag right → save / like
+      // Animate card off to the right, then fire callback
+      setDrag({ x: 0, y: 0, active: false });
+      setFlyOff('right');
     } else if (finalX < -SWIPE_THRESHOLD) {
-      onSwipeLeft?.();  // drag left  → discard
+      // Animate card off to the left, then fire callback
+      setDrag({ x: 0, y: 0, active: false });
+      setFlyOff('left');
+    } else {
+      setDrag({ x: 0, y: 0, active: false });
+    }
+  };
+
+  const handleTransitionEnd = () => {
+    if (flyOff === 'right') {
+      onSwipeRight?.();
+    } else if (flyOff === 'left') {
+      onSwipeLeft?.();
     }
   };
 
@@ -162,12 +172,12 @@ export default function SwipeDeck({
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
         onPointerCancel={onPointerUp}
+        onTransitionEnd={handleTransitionEnd}
         style={{
           position: 'relative',
-          height: 'min(500px, calc(100vh - 230px))',
+          height: '560px',
           borderRadius: '28px',
           overflow: 'hidden',
-
           boxShadow: drag.active
             ? (isSwipingRight ? '0 20px 60px rgba(52,199,89,0.3)' : isSwipingLeft ? '0 20px 60px rgba(255,59,48,0.3)' : '0 20px 40px rgba(0,0,0,0.4)')
             : '0 20px 40px rgba(0, 0, 0, 0.4)',
@@ -175,82 +185,82 @@ export default function SwipeDeck({
           border: drag.active
             ? (isSwipingRight ? '2px solid rgba(52,199,89,0.5)' : isSwipingLeft ? '2px solid rgba(255,59,48,0.5)' : '1px solid rgba(255,255,255,0.1)')
             : '1px solid rgba(255, 255, 255, 0.1)',
-          transform: cardTransform,
-          transition: drag.active ? 'box-shadow 0.1s ease, border-color 0.1s ease' : 'transform 0.35s cubic-bezier(0.25,0.46,0.45,0.94), box-shadow 0.35s ease',
+          transform: flyOff === 'right'
+            ? 'translateX(120vw) rotate(20deg)'
+            : flyOff === 'left'
+              ? 'translateX(-120vw) rotate(-20deg)'
+              : drag.active
+                ? cardTransform
+                : 'translateX(0) rotate(0deg)',
+          transition: flyOff
+            ? 'transform 0.38s cubic-bezier(0.55,0,1,0.45), opacity 0.38s ease'
+            : drag.active
+              ? 'box-shadow 0.1s ease, border-color 0.1s ease'
+              : 'transform 0.35s cubic-bezier(0.25,0.46,0.45,0.94), box-shadow 0.35s ease',
+          opacity: flyOff ? 0 : 1,
           cursor: drag.active ? 'grabbing' : 'grab',
           userSelect: 'none',
           touchAction: 'none'   // prevent browser intercepting swipe as scroll
         }}
       >
-        {/* Card Image — draggable=false prevents browser native drag ghost on desktop */}
+        {/* Base Layer: always user's photo — never the garment catalog image */}
         <img
-          src={displayImage}
-          alt={currentItem.title}
+          src={baseImage}
+          alt="You"
           draggable={false}
           onDragStart={e => e.preventDefault()}
           style={{
+            position: 'absolute', inset: 0,
             width: '100%', height: '100%', objectFit: 'cover',
-            filter: isGenerating ? 'brightness(0.65)' : 'none',
-            transition: 'filter 0.5s ease',
-            userSelect: 'none',
-            WebkitUserDrag: 'none',
-            pointerEvents: 'none'  // let pointer events bubble to the card div, not the img
+            userSelect: 'none', WebkitUserDrag: 'none', pointerEvents: 'none',
+            zIndex: 1,
           }}
         />
 
-        {/* Generating overlay */}
-        {isGenerating && (
-          <div style={{
-            position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
-            background: 'linear-gradient(135deg, rgba(196,120,90,0.18) 0%, transparent 50%, rgba(196,120,90,0.22) 100%)',
-            pointerEvents: 'none', zIndex: 4,
-            display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '16px'
-          }}>
-            {/* Animated laser scan bar */}
-            <div style={{
-              position: 'absolute', left: 0, right: 0, height: '3px',
-              background: 'linear-gradient(90deg, transparent, #E8A882, #C4785A, transparent)',
-              boxShadow: '0 0 15px #E8A882', animation: 'scanline 2.2s linear infinite', top: '20%'
-            }} />
-            {/* Garment preview pill */}
-            <div style={{
-              background: 'rgba(18,18,20,0.85)', backdropFilter: 'blur(12px)',
-              borderRadius: '20px', padding: '10px 16px',
-              border: '1px solid rgba(255,255,255,0.12)',
-              display: 'flex', alignItems: 'center', gap: '10px',
-              boxShadow: '0 8px 24px rgba(0,0,0,0.5)'
-            }}>
-              <img src={currentItem.imageUrl} alt="garment" style={{ width: '44px', height: '56px', objectFit: 'cover', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.15)' }} />
-              <div>
-                <p style={{ fontSize: '11px', color: 'rgba(255,255,255,0.5)', fontWeight: '700', letterSpacing: '1px', textTransform: 'uppercase' }}>Trying on</p>
-                <p style={{ fontSize: '13px', color: 'white', fontWeight: '800', maxWidth: '160px', lineHeight: 1.2 }}>{currentItem.title}</p>
-              </div>
-            </div>
-            {/* Status chip */}
-            <div style={{
-              background: 'rgba(196,120,90,0.9)', backdropFilter: 'blur(8px)',
-              padding: '8px 18px', borderRadius: '20px', display: 'flex', alignItems: 'center', gap: '8px',
-              border: '1px solid rgba(232,168,130,0.5)', boxShadow: '0 8px 24px rgba(196,120,90,0.3)'
-            }}>
-              <Cpu size={15} color="white" style={{ animation: 'spin 2s linear infinite' }} />
-              <span style={{ fontSize: '13px', fontWeight: '800', color: 'white', letterSpacing: '0.5px' }}>AI STYLING YOUR LOOK…</span>
-            </div>
-          </div>
+        {/* AI Try-On Image — crossfades in ONLY when a real try-on result is ready */}
+        {isRealTryOn && (
+          <img
+            src={tryOnUrl}
+            alt={currentItem.title}
+            draggable={false}
+            onDragStart={e => e.preventDefault()}
+            style={{
+              position: 'absolute', inset: 0,
+              width: '100%', height: '100%', objectFit: 'cover',
+              userSelect: 'none', WebkitUserDrag: 'none', pointerEvents: 'none',
+              zIndex: 2,
+              opacity: 1,
+              animation: 'fadeIn 0.6s ease-in',
+            }}
+          />
         )}
 
+        {/* Shimmer overlay while generating so the user photo looks intentional */}
+        {(status === 'pending' || status === 'queued') && (
+          <div style={{
+            position: 'absolute', inset: 0, zIndex: 3, pointerEvents: 'none',
+            background: 'linear-gradient(135deg, transparent 40%, rgba(196,120,90,0.08) 50%, transparent 60%)',
+            backgroundSize: '200% 200%',
+            animation: 'shimmer 2s ease-in-out infinite',
+          }} />
+        )}
+            
         {/* Top Badge */}
         <div style={{
           position: 'absolute', top: 16, right: 16, zIndex: 10,
-          background: isGenerating ? 'rgba(196, 120, 90, 0.9)' : 'rgba(20, 20, 25, 0.85)',
+          background: (currentItem.generationStatus === 'pending' || currentItem.generationStatus === 'queued') ? 'rgba(0, 0, 0, 0.6)' : 'rgba(0, 0, 0, 0.6)',
           backdropFilter: 'blur(10px)',
-          padding: '6px 14px', borderRadius: '20px', color: 'white',
-          fontSize: '12px', fontWeight: '800', display: 'flex', alignItems: 'center', gap: '6px',
-          border: '1px solid rgba(255,255,255,0.2)', boxShadow: '0 4px 12px rgba(0,0,0,0.3)'
+          padding: '7px 12px', borderRadius: '20px', color: 'white',
+          fontSize: '11px', fontWeight: '900', display: 'flex', alignItems: 'center', gap: '6px',
+          border: '1px solid rgba(255,255,255,0.15)', boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+          letterSpacing: '1px'
         }}>
-          {isGenerating ? (
-            <><Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} /><span>GENERATING…</span></>
+          {(currentItem.generationStatus === 'pending' || currentItem.generationStatus === 'queued') ? (
+            <><Loader2 size={12} color="#E8A882" style={{ animation: 'spin 1s linear infinite' }} /><span style={{color: '#E8A882'}}>GENERATING…</span></>
+          ) : currentItem.generationStatus === 'failed' ? (
+            <><Sparkles size={12} color="#888" /><span style={{color: '#aaa'}}>PREVIEW</span></>
           ) : (
-            <><Sparkles size={13} color={theme.colors.primaryLight} /><span>TRIALIX AI</span></>
+            <><Sparkles size={12} color="#E8A882" /><span style={{color: '#E8A882'}}>AI PICK</span></>
           )}
         </div>
 

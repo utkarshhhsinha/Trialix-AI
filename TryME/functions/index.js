@@ -236,30 +236,17 @@ exports.generateDailyPicks = onCall({ cors: true, invoker: "public", timeoutSeco
         ? `The person is wearing ONLY the dress from Image 2. No other clothing is visible.`
         : `The person is wearing ONLY the garment from Image 2 on their upper body. Their lower half is unchanged from Image 1.`;
 
-    const prompt = `VIRTUAL TRY-ON — OUTPUT STATE SPECIFICATION
+    const prompt = `VIRTUAL TRY-ON — CRITICAL CLOTHING SWAP INSTRUCTIONS:
+1. TARGET AREA: Replace the person's ${region} clothing.
+2. REMOVE OLD CLOTHING: The original shirt/top the person is wearing in Image 1 (including its patterns, colors, collar, and sleeves) must be 100% REMOVED and ERASED.
+3. NO BLENDING/LAYERING: Do NOT merge, blend, overlay, or layer the garment from Image 2 over the original clothing. The original clothing must be completely gone, not showing underneath or around the new garment.
+4. DRAW NEW GARMENT: Draw the exact garment from Image 2 onto the person's body. Ensure its color, fabric, fit, and style are identical to Image 2.
+5. EXPOSE BARE SKIN: If the garment in Image 2 is sleeveless, short-sleeved, or has a different neckline, the person's arms, shoulders, and chest must be shown as bare skin, completely erasing the original sleeves and neckline.
+6. PRESERVE IDENTITY: Keep the face, hair, smile, head, pose, background, and lighting of the person in Image 1 100% identical and unchanged.
+7. NO DUPLICATES: Do NOT include any second person, model, or face from Image 2.
 
-The final image you generate must look EXACTLY like this:
-• The person from Image 1 (identical face, hair, skin tone, pose, background, lighting)
-• Their ${region} clothing has been fully replaced by the garment in Image 2
-• ${outputState}
-
-WHAT THE FINAL IMAGE MUST SHOW (✓ = required):
-✓ Face, hair, eyes, expression: pixel-perfect match to Image 1 — DO NOT alter
-✓ Body pose and hand positions: identical to Image 1
-✓ Background and lighting: identical to Image 1
-✓ The COMPLETE garment from Image 2 — every colour, print, button, embroidery detail — fitted naturally on the body
-✓ Full garment visible from shoulder/waist to hem — not cropped
-✓ Bare arms and skin: If the garment in Image 2 is sleeveless, short-sleeved, off-shoulder, or strapless, you MUST completely erase the original long sleeves from the arms and render natural, clean bare skin (arms/shoulders/collarbones).
-
-WHAT MUST NOT APPEAR IN THE OUTPUT (✗ = forbidden):
-✗ Any ${stripList} from the original Image 1 — not even partially, not peeking out, not visible underneath
-✗ Original sleeves: Any long sleeves, prints, or fabric from the original Image 1 clothing on the arms must be completely removed.
-✗ Old clothing hem/skirt: If the person in Image 1 is wearing a long top, kurti, kurta, tunic, or dress, you must completely remove and erase its bottom half/skirt. Keep their original pants/jeans visible without any old clothing layering over them.
-✗ Two garments layered on top of each other
-✗ The new garment placed OVER existing clothing — remove original first
-✗ Any change to the person's face or body
-
-Garment: ${title || 'the item shown in Image 2'}`;
+Garment: ${title || 'item in Image 2'}
+Output: Ultra-realistic, pixel-perfect 4K fashion portrait.`;
 
     const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-preview-image-generation:generateContent?key=${geminiApiKey}`;
 
@@ -409,30 +396,17 @@ async function runVertexAI(humanB64, garmentB64, desc, category, projectId) {
       ? `The person is wearing ONLY the dress from Image 2. No other clothing is visible.`
       : `The person is wearing ONLY the garment from Image 2 on their upper body. Their lower half is unchanged from Image 1.`;
 
-  const prompt = `VIRTUAL TRY-ON — OUTPUT STATE SPECIFICATION
+  const prompt = `VIRTUAL TRY-ON — CRITICAL CLOTHING SWAP INSTRUCTIONS:
+1. TARGET AREA: Replace the person's ${region} clothing.
+2. REMOVE OLD CLOTHING: The original shirt/top the person is wearing in Image 1 (including its patterns, colors, collar, and sleeves) must be 100% REMOVED and ERASED.
+3. NO BLENDING/LAYERING: Do NOT merge, blend, overlay, or layer the garment from Image 2 over the original clothing. The original clothing must be completely gone, not showing underneath or around the new garment.
+4. DRAW NEW GARMENT: Draw the exact garment from Image 2 onto the person's body. Ensure its color, fabric, fit, and style are identical to Image 2.
+5. EXPOSE BARE SKIN: If the garment in Image 2 is sleeveless, short-sleeved, or has a different neckline, the person's arms, shoulders, and chest must be shown as bare skin, completely erasing the original sleeves and neckline.
+6. PRESERVE IDENTITY: Keep the face, hair, smile, head, pose, background, and lighting of the person in Image 1 100% identical and unchanged.
+7. NO DUPLICATES: Do NOT include any second person, model, or face from Image 2.
 
-The final image you generate must look EXACTLY like this:
-• The person from Image 1 (identical face, hair, skin tone, pose, background, lighting)
-• Their ${region} clothing has been fully replaced by the garment in Image 2
-• ${outputState}
-
-WHAT THE FINAL IMAGE MUST SHOW (✓ = required):
-✓ Face, hair, eyes, expression: pixel-perfect match to Image 1 — DO NOT alter
-✓ Body pose and hand positions: identical to Image 1
-✓ Background and lighting: identical to Image 1
-✓ The COMPLETE garment from Image 2 — every colour, print, button, embroidery detail — fitted naturally on the body
-✓ Full garment visible from shoulder/waist to hem — not cropped
-✓ Bare arms and skin: If the garment in Image 2 is sleeveless, short-sleeved, off-shoulder, or strapless, you MUST completely erase the original long sleeves from the arms and render natural, clean bare skin (arms/shoulders/collarbones).
-
-WHAT MUST NOT APPEAR IN THE OUTPUT (✗ = forbidden):
-✗ Any ${stripList} from the original Image 1 — not even partially, not peeking out, not visible underneath
-✗ Original sleeves: Any long sleeves, prints, or fabric from the original Image 1 clothing on the arms must be completely removed.
-✗ Old clothing hem/skirt: If the person in Image 1 is wearing a long top, kurti, kurta, tunic, or dress, you must completely remove and erase its bottom half/skirt. Keep their original pants/jeans visible without any old clothing layering over them.
-✗ Two garments layered on top of each other
-✗ The new garment placed OVER existing clothing — remove original first
-✗ Any change to the person's face or body
-
-Garment: ${desc || 'the item shown in Image 2'}`;
+Garment: ${desc || 'item in Image 2'}
+Output: Ultra-realistic, pixel-perfect 4K fashion portrait.`;
 
   const requestBody = {
     contents: [{
@@ -455,12 +429,11 @@ Garment: ${desc || 'the item shown in Image 2'}`;
   const project = projectId || process.env.VERTEX_PROJECT_ID || 'aura-ai-powered-fashion-aura';
   const location = 'us-central1';
 
-  // Try models in priority order — supports image generation
   const models = [
+    'gemini-2.5-flash-image',
     'gemini-2.0-flash-001',
     'gemini-2.0-flash',
     'gemini-2.5-flash',
-    'gemini-2.5-flash-image',
   ];
 
 
@@ -473,17 +446,31 @@ Garment: ${desc || 'the item shown in Image 2'}`;
     const vertexUrl = `https://${location}-aiplatform.googleapis.com/v1/projects/${project}/locations/${location}/publishers/google/models/${model}:generateContent`;
     logger.log(`[AI Backend] → Calling Vertex AI: ${model}...`);
 
-    const res = await fetch(vertexUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${accessToken}`,
-      },
-      body: JSON.stringify(requestBody),
-    });
+    let attempts = 0;
+    let success = false;
+    let res;
+    while (attempts < 3 && !success) {
+      res = await fetch(vertexUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify(requestBody),
+      });
+
+      if (res.status === 429) {
+        attempts++;
+        const backoff = attempts * 2000;
+        logger.warn(`[AI Backend] ${model} rate limited (429). Retrying in ${backoff / 1000}s (attempt ${attempts}/3)...`);
+        await new Promise(r => setTimeout(r, backoff));
+      } else {
+        success = true;
+      }
+    }
 
     if (res.status === 429) {
-      logger.warn(`[AI Backend] ${model} rate limited (429)`);
+      logger.error(`[AI Backend] ${model} failed after 3 retries due to 429 rate limit.`);
       continue;
     }
 
@@ -583,7 +570,7 @@ exports.generateTryOn = onCall({
 exports.shareLook = onRequest({ cors: true, invoker: "public" }, (req, res) => {
   const imageUrl = req.query.image || '';
   const desc = req.query.desc || 'AI-Powered Virtual Fashion Try-On';
-  const brand = req.query.brand || 'TrialX';
+  const brand = req.query.brand || 'oraneo';
 
   const html = `<!DOCTYPE html>
 <html lang="en">
@@ -592,18 +579,18 @@ exports.shareLook = onRequest({ cors: true, invoker: "public" }, (req, res) => {
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   
   <!-- Open Graph Meta Tags for Social Previews (WhatsApp, iMessage, etc.) -->
-  <meta property="og:title" content="TrialX AI - Live AI Try-On Feed" />
+  <meta property="og:title" content="oraneo - Live AI Try-On Feed" />
   <meta property="og:description" content="Look: ${desc} ${brand ? 'by ' + brand : ''}. Style any outfit in seconds!" />
   <meta property="og:image" content="${imageUrl}" />
   <meta property="og:type" content="website" />
-  <meta property="og:url" content="https://trialix.app/share" />
+  <meta property="og:url" content="https://oraneo.space/share" />
   
   <meta name="twitter:card" content="summary_large_image" />
-  <meta name="twitter:title" content="TrialX AI - Live AI Try-On Feed" />
+  <meta name="twitter:title" content="oraneo - Live AI Try-On Feed" />
   <meta name="twitter:description" content="Look: ${desc} ${brand ? 'by ' + brand : ''}." />
   <meta name="twitter:image" content="${imageUrl}" />
 
-  <title>TrialX AI - Try-On Look</title>
+  <title>oraneo - Try-On Look</title>
   
   <!-- Modern Typography -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -792,7 +779,7 @@ exports.shareLook = onRequest({ cors: true, invoker: "public" }, (req, res) => {
 <body>
   <div class="container">
     <div class="logo-container">
-      <h1 class="logo-text">TrialX AI</h1>
+      <h1 class="logo-text">oraneo</h1>
       <p class="subtitle">Virtual Trial Room</p>
     </div>
     
@@ -806,7 +793,7 @@ exports.shareLook = onRequest({ cors: true, invoker: "public" }, (req, res) => {
       </div>
     </div>
     
-    <a href="https://trialix.app" class="cta-button">Download TrialX App</a>
+    <a href="https://oraneo.space" class="cta-button">Download oraneo App</a>
   </div>
 </body>
 </html>`;

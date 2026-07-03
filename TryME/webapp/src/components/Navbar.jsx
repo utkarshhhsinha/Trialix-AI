@@ -30,11 +30,11 @@ export default function Navbar({ profile, onOpenTrialRoom, onOpenCustomTryOn, on
           fontSize: '18px',
           boxShadow: '0 4px 10px rgba(196,120,90,0.3)'
         }}>
-          T
+          O
         </div>
         <div>
           <h1 style={{ fontFamily: 'Outfit, sans-serif', fontSize: '20px', fontWeight: '800', color: theme.colors.text }}>
-            TrialX <span style={{ color: theme.colors.primary }}>AI</span>
+            oraneo
           </h1>
         </div>
       </div>
