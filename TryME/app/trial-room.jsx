@@ -353,7 +353,7 @@ export default function TrialRoom() {
           {/* ── Card 0: the product the user is currently trying */}
           <View style={styles.garmentCard}>
             <Image
-              source={productImageUrl ? { uri: productImageUrl } : require('../Clothes/Men/shirts_men/1.png')}
+              source={productImageUrl ? { uri: productImageUrl } : require('@/Clothes/Men/shirts/shirt 1.png')}
               style={styles.garmentImage}
               resizeMode="cover"
             />
