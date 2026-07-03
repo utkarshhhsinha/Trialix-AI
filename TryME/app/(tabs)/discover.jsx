@@ -631,8 +631,7 @@ export default function DiscoverScreen() {
               : <Ionicons name="person-circle" size={36} color="rgba(255,255,255,0.5)" />}
           </Pressable>
           <View style={s.headerCenter}>
-            <Text style={s.logoText}>ora</Text>
-            <Text style={s.logoAI}>AI</Text>
+            <Text style={s.logoText}>oraneo</Text>
           </View>
           <View style={s.batchBadge}>
             <Ionicons name="shirt-outline" size={12} color="#C4785A" />
