@@ -27,31 +27,31 @@ const GARMENTS = [
   {
     id: 'g1',
     label: 'Solid Casual White Shirt',
-    image: require('@/Clothes/Men/shirts_men/1.png'),
+    image: require('@/Clothes/Men/shirts/shirt 1.png'),
     buyLink: 'https://www.flipkart.com/rare-rabbit-men-solid-casual-white-shirt/p/itmbdde6a7e14889?pid=SHTHMAQXCGZTYZZD',
   },
   {
     id: 'g2',
     label: 'Solid Casual Dark Blue Shirt',
-    image: require('@/Clothes/Men/shirts_men/2.png'),
+    image: require('@/Clothes/Men/shirts/shirt 2.png'),
     buyLink: 'https://www.flipkart.com/rare-rabbit-men-solid-casual-dark-blue-shirt/p/itm32007d67b122c?pid=SHTHMAQXB7FTEFBR',
   },
   {
     id: 'g3',
     label: 'Solid Casual Blue Shirt',
-    image: require('@/Clothes/Men/shirts_men/3.png'),
+    image: require('@/Clothes/Men/shirts/shirt 3.png'),
     buyLink: 'https://www.flipkart.com/rare-rabbit-men-solid-casual-blue-shirt/p/itm84adf30bb6235?pid=SHTHMAQX28HXGWMH',
   },
   {
     id: 'g4',
     label: 'Slim Fit Striped Casual Shirt',
-    image: require('@/Clothes/Men/shirts_men/4.png'),
+    image: require('@/Clothes/Men/shirts/shirt 4.png'),
     buyLink: 'https://tigc.in/products/men-s-blue-slim-fit-striped-casual-shirt-0525-shstcs-02-02',
   },
   {
     id: 'g5',
     label: 'Blue Striped Slim Fit Shirt',
-    image: require('@/Clothes/Men/shirts_men/5.png'),
+    image: require('@/Clothes/Men/shirts/shirt 5.png'),
     buyLink: 'https://tigc.in/products/mens-blue-striped-slim-fit-shirt-0824-shstyd-06-02-blue',
   },
 ];
