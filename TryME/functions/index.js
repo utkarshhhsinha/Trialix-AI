@@ -1,6 +1,7 @@
 const { onCall, HttpsError, onRequest } = require("firebase-functions/v2/https");
 const { logger } = require("firebase-functions");
 const admin = require("firebase-admin");
+const jpeg = require("jpeg-js");
 
 if (!admin.apps.length) admin.initializeApp();
 
@@ -203,145 +204,88 @@ exports.generateDailyPicks = onCall({ cors: true, invoker: "public", timeoutSeco
     } catch (e) { logger.warn('[generateDailyPicks] FCM failed:', e.message); }
   }
 
-  async function runGeminiFast(firebaseKey, projectId, humanB64, garmentB64, title, category) {
-    const geminiApiKey = process.env.GEMINI_API_KEY || firebaseKey;
-    if (geminiApiKey) {
-      try {
-        logger.log(`[AI Backend] runGeminiFast trying Google AI Studio first...`);
-        return await runGeminiStudio(geminiApiKey, humanB64, garmentB64, title, category);
-      } catch (studioErr) {
-        logger.warn(`[AI Backend] runGeminiFast Google AI Studio failed: ${studioErr.message}`);
-      }
-    }
-    return runVertexAI(humanB64, garmentB64, title, category, projectId);
-  }
 
-  async function runGeminiStudio(geminiApiKey, humanB64, garmentB64, title, category) {
-    const isLowerBody = category === 'lower_body';
-    const isDress = category === 'dress' || category === 'dresses';
-
-    const region = isLowerBody ? 'lower body (below waist)'
-      : isDress ? 'entire body (top + bottom)'
-        : 'upper body (torso and arms)';
-
-    const stripList = isLowerBody
-      ? 'pants, trousers, palazzos, skirt, leggings, or any bottom garment'
-      : isDress
-        ? 'any clothing at all — kurti, top, saree, dupatta, lehenga, palazzos, jeans — everything'
-        : 'kurti, kurta, top, shirt, blouse, saree blouse, jacket, dupatta, or any upper-body garment';
-
-    const outputState = isLowerBody
-      ? `The person is wearing their original top, but their bottom garment has been completely replaced by the item from Image 2.`
-      : isDress
-        ? `The person is wearing ONLY the dress from Image 2. No other clothing is visible.`
-        : `The person is wearing ONLY the garment from Image 2 on their upper body. Their lower half is unchanged from Image 1.`;
-
-    const prompt = `VIRTUAL TRY-ON — CRITICAL CLOTHING SWAP INSTRUCTIONS:
-1. TARGET AREA: Replace the person's ${region} clothing.
-2. REMOVE OLD CLOTHING: The original shirt/top the person is wearing in Image 1 (including its patterns, colors, collar, and sleeves) must be 100% REMOVED and ERASED.
-3. NO BLENDING/LAYERING: Do NOT merge, blend, overlay, or layer the garment from Image 2 over the original clothing. The original clothing must be completely gone, not showing underneath or around the new garment.
-4. DRAW NEW GARMENT: Draw the exact garment from Image 2 onto the person's body. Ensure its color, fabric, fit, and style are identical to Image 2.
-5. EXPOSE BARE SKIN: If the garment in Image 2 is sleeveless, short-sleeved, or has a different neckline, the person's arms, shoulders, and chest must be shown as bare skin, completely erasing the original sleeves and neckline.
-6. PRESERVE IDENTITY: Keep the face, hair, smile, head, pose, background, and lighting of the person in Image 1 100% identical and unchanged.
-7. NO DUPLICATES: Do NOT include any second person, model, or face from Image 2.
-
-Garment: ${title || 'item in Image 2'}
-Output: Ultra-realistic, pixel-perfect 4K fashion portrait.`;
-
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-preview-image-generation:generateContent?key=${geminiApiKey}`;
-
-    const requestBody = {
-      contents: [{
-        role: 'user',
-        parts: [
-          { text: prompt },
-          { text: '— IMAGE 1: THE PERSON — (replicate this person exactly, only change their clothing)' },
-          { inlineData: { mimeType: 'image/jpeg', data: humanB64 } },
-          { text: '— IMAGE 2: THE NEW GARMENT — (this exact item replaces the clothing in the region described above)' },
-          { inlineData: { mimeType: 'image/jpeg', data: garmentB64 } },
-        ],
-      }],
-      generationConfig: {
-        candidateCount: 1,
-        responseModalities: ['TEXT', 'IMAGE'],
-        temperature: 0.05,
-      },
-    };
-
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(requestBody),
-    });
-
-    if (!res.ok) {
-      const data = await res.json().catch(() => ({}));
-      throw new Error(data?.error?.message || `HTTP ${res.status}`);
-    }
-
-    const data = await res.json();
-    const imagePart = data.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
-    if (imagePart?.inlineData?.data) {
-      return `data:${imagePart.inlineData.mimeType || 'image/jpeg'};base64,${imagePart.inlineData.data}`;
-    }
-    throw new Error('Google AI Studio returned no image data');
-  }
 
 
   // Generate one pick — garmentB64 is pre-fetched, so no network call inside the retry loop.
-  // maxRetries reduced to 2 for speed; retry wait cut to 800ms flat.
-  async function generateOnePick(garment, garmentB64, index, maxRetries = 2) {
+  // Increased to 3 retries to handle validation failures. Retry with higher temperature if validation fails.
+  async function generateOnePick(garment, garmentB64, index, maxRetries = 3) {
     const geminiApiKey = process.env.GEMINI_API_KEY || firebaseKey;
 
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
         let dataUri;
+        const useHighTemp = attempt > 1; // Increase temperature on retry for more creative changes
+        
         try {
-          logger.log(`[generateDailyPicks] Pick ${index + 1} Attempt ${attempt} calling Vertex AI...`);
-          dataUri = await runGeminiFast(firebaseKey, projectId, humanB64, garmentB64, garment.title, garment.category);
+          logger.log(`[generateDailyPicks] Pick ${index + 1} Attempt ${attempt} calling Vertex AI${useHighTemp ? ' (high temp)' : ''}...`);
+          dataUri = await runGeminiFast(firebaseKey, projectId, humanB64, garmentB64, garment.title, garment.category, useHighTemp);
         } catch (fastErr) {
           logger.warn(`[generateDailyPicks] Pick ${index + 1} Attempt ${attempt} Vertex AI failed: ${fastErr.message}`);
           if (geminiApiKey) {
             logger.log(`[generateDailyPicks] Pick ${index + 1} Attempt ${attempt} trying Google AI Studio fallback...`);
-            dataUri = await runGeminiStudio(geminiApiKey, humanB64, garmentB64, garment.title, garment.category);
+            dataUri = await runGeminiStudio(geminiApiKey, humanB64, garmentB64, garment.title, garment.category, useHighTemp);
           } else {
             throw fastErr;
           }
         }
 
-        if (isValidTryOnResult(dataUri, garment.imageUrl)) {
+        if (isValidTryOnResult(dataUri, garment.imageUrl, humanB64, garmentB64)) {
           const storageUrl = await uploadDataUri(dataUri, `daily_picks/${uid}/${Date.now()}_${index}`);
+          logger.log(`[generateDailyPicks] ✅ Pick ${index + 1} validated and uploaded`);
           return { ...garment, tryOnImageUrl: storageUrl, generatedAt: Date.now() };
         }
-        throw new Error("Invalid try-on image returned");
+        logger.warn(`[generateDailyPicks] ❌ Pick ${index + 1} Attempt ${attempt} validation failed — AI returned original/invalid image`);
+        throw new Error("Invalid try-on image returned — AI did not modify the original");
       } catch (e) {
         logger.warn(`[generateDailyPicks] Pick ${index + 1} Attempt ${attempt} failed: ${e.message}`);
         if (attempt < maxRetries) {
-          await new Promise(r => setTimeout(r, 800));
+          const backoff = 1000 + (attempt * 500); // Progressive backoff: 1.5s, 2s
+          await new Promise(r => setTimeout(r, backoff));
         }
       }
     }
 
-    // All attempts failed — show garment image as fallback so the deck doesn't break
-    logger.error(`[generateDailyPicks] Pick ${index + 1} completely failed. Falling back to garment image.`);
-    return { ...garment, tryOnImageUrl: garment.imageUrl, generatedAt: Date.now() };
+    // All attempts failed — DON'T show fallback, skip this pick entirely
+    // This forces a new pick to be generated next time instead of showing garment image
+    logger.error(`[generateDailyPicks] Pick ${index + 1} completely failed after ${maxRetries} attempts. Skipping this pick.`);
+    return null; // Return null so caller can filter it out
   }
 
-  // Run all 3 in parallel — each streams to Firestore as it resolves
-  // ALWAYS generate personalized try-ons; never use static catalog images as results.
+  // Run all 3 sequentially to prevent concurrent requests from hitting the Vertex AI 429 rate limit
   const picks = [...placeholderPicks];
 
-  await Promise.all(garments.map(async (garment, i) => {
+  for (let i = 0; i < garments.length; i++) {
+    const garment = garments[i];
+    logger.log(`[generateDailyPicks] Starting sequential pick ${i + 1}/3: ${garment.title}`);
+    
     const result = await generateOnePick(garment, garmentB64s[i], i);
-    picks[i] = result;
-    logger.log(`[generateDailyPicks] pick ${i + 1}/3 done (tryOn=${!!result.tryOnImageUrl}): ${garment.title}`);
-    // Write the FULL picks array each time — avoids Firestore converting array → map
-    // when dot-notation updates like picks.0 / picks.1 are used.
-    await docRef.update({ picks: [...picks], status: 'generating' });
-  }));
+    if (result) {
+      picks[i] = result;
+      logger.log(`[generateDailyPicks] pick ${i + 1}/3 done (tryOn=${!!result.tryOnImageUrl}): ${garment.title}`);
+      await docRef.update({ picks: [...picks], status: 'generating' });
+    } else {
+      logger.error(`[generateDailyPicks] pick ${i + 1}/3 returned null — skipping`);
+    }
 
-  // Mark ready — even if some picks have null tryOnImageUrl (client shows garment image fallback)
-  await docRef.update({ status: 'ready', picks });
+    // Add a 2.5 second cooldown between calls to reset the Vertex AI request rate quota
+    if (i < garments.length - 1) {
+      logger.log(`[generateDailyPicks] Cooldown for 2.5s to prevent 429...`);
+      await new Promise(r => setTimeout(r, 2500));
+    }
+  }
+
+  // Filter out null picks (failed validations)
+  const validPicks = picks.filter(p => p !== null && p.tryOnImageUrl);
+  
+  if (validPicks.length === 0) {
+    logger.error('[generateDailyPicks] All picks failed validation. Marking as error.');
+    await docRef.update({ status: 'error', picks: [] });
+    throw new HttpsError('internal', 'All AI generations failed validation — no valid try-ons produced');
+  }
+
+  // Mark ready with only valid picks
+  await docRef.update({ status: 'ready', picks: validPicks });
 
   // Notify user their looks are ready
   await sendFCM('✨ Your looks are ready!', 'Swipe 3 fresh AI outfits picked just for you.');
@@ -350,12 +294,229 @@ Output: Ultra-realistic, pixel-perfect 4K fashion portrait.`;
 });
 
 // helper to assert that the try-on result is valid
-function isValidTryOnResult(resultUrl, garmentUrl) {
-  if (!resultUrl) return false;
-  if (resultUrl === garmentUrl) return false;
-  if (resultUrl.startsWith("data:") && resultUrl.length < 8000) return false;
+function isValidTryOnResult(resultUrl, garmentUrl, humanB64 = null, garmentB64 = null) {
+  if (!resultUrl) {
+    console.warn('[AI Validation] ❌ No result URL');
+    return false;
+  }
+
+  // Self-heal: extract garment base64 if it was passed in place of garmentUrl
+  let resolvedGarmentB64 = garmentB64;
+  if (!resolvedGarmentB64 && garmentUrl && garmentUrl.length > 1000 && !garmentUrl.startsWith('http') && !garmentUrl.startsWith('/') && !garmentUrl.startsWith('data:')) {
+    resolvedGarmentB64 = garmentUrl;
+  } else if (!resolvedGarmentB64 && garmentUrl && garmentUrl.startsWith('data:')) {
+    resolvedGarmentB64 = garmentUrl.split('base64,')[1] || '';
+  }
+
+  if (resultUrl === garmentUrl) {
+    console.warn('[AI Validation] ❌ Result matches garment URL');
+    return false;
+  }
+  if (resultUrl.startsWith("data:") && resultUrl.length < 8000) {
+    console.warn('[AI Validation] ❌ Data URI too small');
+    return false;
+  }
+  
+  // 🔥 CRITICAL: Visual similarity comparison using jpeg-js (decodes and samples pixel grids)
+  if (resultUrl.startsWith('data:image') && humanB64 && humanB64.length > 1000) {
+    try {
+      const resultB64 = resultUrl.split('base64,')[1] || '';
+      
+      const humanBuf = Buffer.from(humanB64, 'base64');
+      const resultBuf = Buffer.from(resultB64, 'base64');
+
+      // Only run decoded pixel comparison if both buffers are valid JPEGs
+      if (humanBuf[0] === 0xFF && humanBuf[1] === 0xD8 && resultBuf[0] === 0xFF && resultBuf[1] === 0xD8) {
+        const humanDecoded = jpeg.decode(humanBuf, { useTArray: true });
+        const resultDecoded = jpeg.decode(resultBuf, { useTArray: true });
+
+        let totalDistHuman = 0;
+        let count = 0;
+
+        const getPixel = (decoded, xPct, yPct) => {
+          const x = Math.floor(xPct * (decoded.width - 1));
+          const y = Math.floor(yPct * (decoded.height - 1));
+          const idx = (y * decoded.width + x) * 4;
+          return {
+            r: decoded.data[idx],
+            g: decoded.data[idx + 1],
+            b: decoded.data[idx + 2]
+          };
+        };
+
+        // Sample a 9x9 grid (81 points) across the visual frame
+        for (let gx = 1; gx <= 9; gx++) {
+          const xPct = gx / 10;
+          for (let gy = 1; gy <= 9; gy++) {
+            const yPct = gy / 10;
+
+            const p1 = getPixel(humanDecoded, xPct, yPct);
+            const p2 = getPixel(resultDecoded, xPct, yPct);
+
+            const dR = p1.r - p2.r;
+            const dG = p1.g - p2.g;
+            const dB = p1.b - p2.b;
+            const dist = Math.sqrt(dR*dR + dG*dG + dB*dB);
+
+            totalDistHuman += dist;
+            count++;
+          }
+        }
+
+        const avgDistHuman = totalDistHuman / count;
+        console.log(`[AI Validation] Average visual distance from Human Photo: ${avgDistHuman.toFixed(2)}`);
+
+        // If the average distance is less than 12.0, the images are visually almost identical
+        if (avgDistHuman < 12.0) {
+          console.warn(`[AI Validation] ❌ Rejected: Average visual distance from Human is only ${avgDistHuman.toFixed(2)} — AI returned unmodified original image.`);
+          return false;
+        }
+
+        // Compare visual similarity against garment/product photo
+        if (resolvedGarmentB64 && resolvedGarmentB64.length > 1000) {
+          const garmentBuf = Buffer.from(resolvedGarmentB64, 'base64');
+          if (garmentBuf[0] === 0xFF && garmentBuf[1] === 0xD8) {
+            const garmentDecoded = jpeg.decode(garmentBuf, { useTArray: true });
+            let totalDistGarment = 0;
+
+            for (let gx = 1; gx <= 9; gx++) {
+              const xPct = gx / 10;
+              for (let gy = 1; gy <= 9; gy++) {
+                const yPct = gy / 10;
+
+                const p1 = getPixel(garmentDecoded, xPct, yPct);
+                const p2 = getPixel(resultDecoded, xPct, yPct);
+
+                const dR = p1.r - p2.r;
+                const dG = p1.g - p2.g;
+                const dB = p1.b - p2.b;
+                const dist = Math.sqrt(dR*dR + dG*dG + dB*dB);
+
+                totalDistGarment += dist;
+              }
+            }
+
+            const avgDistGarment = totalDistGarment / count;
+            console.log(`[AI Validation] Average visual distance from Garment Photo: ${avgDistGarment.toFixed(2)}`);
+
+            if (avgDistGarment < 12.0) {
+              console.warn(`[AI Validation] ❌ Rejected: Average visual distance from Garment is only ${avgDistGarment.toFixed(2)} — AI returned unmodified product photo.`);
+              return false;
+            }
+          }
+        }
+      } else {
+        // Fallback: binary check if not both JPEGs
+        const lenDiff = Math.abs(resultB64.length - humanB64.length);
+        const threshold = humanB64.length * 0.02;
+        if (lenDiff < threshold && resultB64.slice(0, 500) === humanB64.slice(0, 500)) {
+          console.warn('[AI Validation] ❌ Rejected: Fallback binary comparison matches original');
+          return false;
+        }
+      }
+    } catch (err) {
+      console.warn('[AI Validation] Visual distance check failed:', err.message);
+      // Fallback: simple length check
+      const resultB64 = resultUrl.split('base64,')[1] || '';
+      if (Math.abs(resultB64.length - humanB64.length) < humanB64.length * 0.01) {
+        return false;
+      }
+    }
+  }
+  
+  console.log('[AI Validation] ✅ Result passed all checks');
   return true;
 }
+
+async function runGeminiFast(firebaseKey, projectId, humanB64, garmentB64, title, category, useHighTemp = false) {
+  const geminiApiKey = process.env.GEMINI_API_KEY || firebaseKey;
+  if (geminiApiKey) {
+    try {
+      logger.log(`[AI Backend] runGeminiFast trying Google AI Studio first...`);
+      return await runGeminiStudio(geminiApiKey, humanB64, garmentB64, title, category, useHighTemp);
+    } catch (studioErr) {
+      logger.warn(`[AI Backend] runGeminiFast Google AI Studio failed: ${studioErr.message}`);
+    }
+  }
+  return runVertexAI(humanB64, garmentB64, title, category, projectId, useHighTemp);
+}
+
+async function runGeminiStudio(geminiApiKey, humanB64, garmentB64, title, category, useHighTemp = false) {
+  const isLowerBody = category === 'lower_body';
+  const isDress = category === 'dress' || category === 'dresses';
+
+  const region = isLowerBody ? 'lower body (below waist)'
+    : isDress ? 'entire body (top + bottom)'
+      : 'upper body (torso and arms)';
+
+  const stripList = isLowerBody
+    ? 'pants, trousers, palazzos, skirt, leggings, or any bottom garment'
+    : isDress
+      ? 'any clothing at all — kurti, top, saree, dupatta, lehenga, palazzos, jeans — everything'
+      : 'kurti, kurta, top, shirt, blouse, saree blouse, jacket, dupatta, or any upper-body garment';
+
+  const outputState = isLowerBody
+    ? `The person is wearing their original top, but their bottom garment has been completely replaced by the item from Image 2.`
+    : isDress
+      ? `The person is wearing ONLY the dress from Image 2. No other clothing is visible.`
+      : `The person is wearing ONLY the garment from Image 2 on their upper body. Their lower half is unchanged from Image 1.`;
+
+  const prompt = `VIRTUAL TRY-ON AI — YOU MUST GENERATE A NEW IMAGE. DO NOT RETURN THE ORIGINAL.
+
+CRITICAL RULES:
+1. TARGET AREA: Replace the person's ${region} clothing completely.
+2. ERASE OLD CLOTHES FIRST: The original ${stripList} in Image 1 must be 100% REMOVED before drawing the new garment.
+3. NO LAYERING: Do NOT blend or overlay. The old clothes must disappear completely.
+4. DRAW NEW GARMENT: Apply the EXACT garment from Image 2 onto the person's body. Match its color, pattern, fabric, fit perfectly.
+5. EXPOSE SKIN: If Image 2 shows bare arms/shoulders/neck, the person's skin MUST be visible there. Erase old sleeves/necklines.
+6. PRESERVE FACE: Keep face, hair, pose, background 100% identical to Image 1.
+7. ADD WATERMARK: Place a subtle text watermark "styled by 🔍 oraneo" in the bottom-right corner (small, elegant, semi-transparent).
+8. VALIDATE OUTPUT: The output image MUST look visibly different from Image 1. The clothing MUST have changed. DO NOT return Image 1 unmodified.
+
+Garment: ${title || 'item shown in Image 2'}
+
+IF YOU CANNOT PERFORM THE SWAP, DO NOT RETURN IMAGE 1. Generate a visibly different result or fail.
+Output: Ultra-realistic 4K portrait with watermark "styled by 🔍 oraneo"`;
+
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-preview-image-generation:generateContent?key=${geminiApiKey}`;
+
+  const requestBody = {
+    contents: [{
+      role: 'user',
+      parts: [
+        { text: prompt },
+        { text: '— IMAGE 1: THE PERSON — (replicate this person exactly, only change their clothing)' },
+        { inlineData: { mimeType: 'image/jpeg', data: humanB64 } },
+        { text: '— IMAGE 2: THE NEW GARMENT — (this exact item replaces the clothing in the region described above)' },
+        { inlineData: { mimeType: 'image/jpeg', data: garmentB64 } },
+      ],
+    }],
+    generationConfig: {
+      candidateCount: 1,
+      responseModalities: ['TEXT', 'IMAGE'],
+      temperature: useHighTemp ? 0.7 : 0.25, // Higher temp on retry to force different output
+    },
+  };
+
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(requestBody),
+  });
+
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data?.error?.message || `HTTP ${res.status}`);
+  }
+
+  const data = await res.json();
+  const imagePart = data.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
+  if (imagePart?.inlineData?.data) {
+    return `data:${imagePart.inlineData.mimeType || 'image/jpeg'};base64,${imagePart.inlineData.data}`;
+  }
+  throw new Error('Google AI Studio returned no image data');
+}
+
 
 // Vertex AI logic matching client implementation (billed to Google Cloud credits)
 /**
@@ -376,7 +537,7 @@ async function getGCPAccessToken() {
  * Model: gemini-2.0-flash (supports image output via responseModalities).
  * Endpoint: us-central1-aiplatform.googleapis.com (standard Vertex AI REST API)
  */
-async function runVertexAI(humanB64, garmentB64, desc, category, projectId) {
+async function runVertexAI(humanB64, garmentB64, desc, category, projectId, useHighTemp = false) {
   const isLowerBody = category === 'lower_body';
   const isDress = category === 'dress' || category === 'dresses';
 
@@ -422,7 +583,7 @@ Output: Ultra-realistic, pixel-perfect 4K fashion portrait.`;
     generationConfig: {
       candidateCount: 1,
       responseModalities: ['TEXT', 'IMAGE'],
-      temperature: 0.05,
+      temperature: useHighTemp ? 0.7 : 0.25, // Higher temp on retry to force different output
     },
   };
 
@@ -431,9 +592,6 @@ Output: Ultra-realistic, pixel-perfect 4K fashion portrait.`;
 
   const models = [
     'gemini-2.5-flash-image',
-    'gemini-2.0-flash-001',
-    'gemini-2.0-flash',
-    'gemini-2.5-flash',
   ];
 
 
@@ -507,7 +665,12 @@ Output: Ultra-realistic, pixel-perfect 4K fashion portrait.`;
 
 exports.generateTryOn = onCall({
   cors: true,
-  invoker: "public"
+  invoker: "public",
+  concurrency: 80,           // Each instance handles 80 concurrent requests
+  minInstances: 2,           // 2 warm instances always ready (no cold starts)
+  maxInstances: 100,         // Scale to 100 × 80 = 8,000 concurrent requests
+  timeoutSeconds: 120,       // Allow 2 minutes for generation
+  memory: '1GiB'             // Required for base64 image processing
 }, async (request) => {
   let { humanB64, garmentB64, humanUrl, garmentUrl, desc, category } = request.data || {};
 
@@ -534,36 +697,37 @@ exports.generateTryOn = onCall({
   const geminiApiKey = process.env.GEMINI_API_KEY || process.env.FB_API_KEY;
 
   let outputDataUri = null;
-  let firstErr = null;
+  let lastErr = null;
 
-  // Try Google AI Studio first (extremely fast, handles image generation natively)
+  // PRIMARY: Vertex AI gemini-2.5-flash-image (GCP credits, scalable)
+  try {
+    logger.log('[AI Backend] PRIMARY: Vertex AI gemini-2.5-flash-image...');
+    outputDataUri = await runVertexAI(humanB64, garmentB64, desc || 'fashion garment', category, projectId);
+    if (outputDataUri && isValidTryOnResult(outputDataUri, garmentB64, humanB64)) {
+      return { tryOnImageUrl: outputDataUri };
+    }
+  } catch (err) {
+    logger.warn('[AI Backend] Vertex AI gemini-2.5-flash-image failed:', err.message);
+    lastErr = err;
+  }
+
+  // FALLBACK: Try Google AI Studio gemini-2.0-flash-preview-image-generation
   if (geminiApiKey) {
     try {
-      logger.log('[AI Backend] Launching Google AI Studio (fast pathway)...');
+      logger.log('[AI Backend] FALLBACK: Google AI Studio gemini-2.0-flash-preview-image-generation...');
       outputDataUri = await runGeminiStudio(geminiApiKey, humanB64, garmentB64, desc || 'fashion garment', category);
+      if (outputDataUri && isValidTryOnResult(outputDataUri, garmentB64, humanB64)) {
+        return { tryOnImageUrl: outputDataUri };
+      }
     } catch (studioErr) {
-      logger.warn('[AI Backend] Google AI Studio failed: ' + studioErr.message);
-      firstErr = studioErr;
+      logger.warn('[AI Backend] Google AI Studio failed:', studioErr.message);
+      lastErr = studioErr;
     }
   }
 
-  // Fallback to Vertex AI if Google AI Studio failed or API key was missing
-  if (!outputDataUri) {
-    try {
-      logger.log('[AI Backend] Routing to Vertex AI fallback...');
-      outputDataUri = await runVertexAI(humanB64, garmentB64, desc || 'fashion garment', category, projectId);
-    } catch (err) {
-      logger.error('[AI Backend] Vertex AI fallback failed:', err.message);
-      if (!firstErr) firstErr = err;
-    }
-  }
-
-  if (outputDataUri && isValidTryOnResult(outputDataUri, garmentB64)) {
-    return { tryOnImageUrl: outputDataUri };
-  }
-
-  const finalErrorMsg = firstErr ? firstErr.message : 'All generation paths failed.';
-  throw new HttpsError('internal', `Try-on generation failed: ${finalErrorMsg}`);
+  // All models failed — return null (not an error) so caller can gracefully skip this pick
+  logger.error('[AI Backend] All models failed. Returning null tryOnImageUrl.');
+  return { tryOnImageUrl: null };
 });
 
 

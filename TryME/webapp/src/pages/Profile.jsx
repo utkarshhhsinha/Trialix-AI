@@ -4,8 +4,10 @@ import { signOut } from 'firebase/auth';
 import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { firebaseAuth, firestore, uploadBase64Image } from '../lib/firebase';
 import { subscribeUserProfile, subscribeUserTryOns, subscribeUserCommunityPosts } from '../lib/community';
+import { hasUserReviewed } from '../lib/reviews';
+import ReviewModal from '../components/ReviewModal';
 import theme from '../theme';
-import { Edit2, Heart, Image as ImageIcon, Video, X, Upload, Check, LogOut, Sliders, ChevronRight } from 'lucide-react';
+import { Edit2, Heart, Image as ImageIcon, Video, X, Upload, Check, LogOut, Sliders, ChevronRight, Star } from 'lucide-react';
 
 
 export default function Profile({ onOpenCustomTryOn }) {
@@ -17,13 +19,16 @@ export default function Profile({ onOpenCustomTryOn }) {
   const [communityPosts, setCommunityPosts] = useState([]);
   const [activeTab, setActiveTab] = useState('tryons');
 
-  // Edit Profile Modal state
   const [showEditModal, setShowEditModal] = useState(false);
   const [editName, setEditName] = useState('');
   const [editPhone, setEditPhone] = useState('');
   const [editGender, setEditGender] = useState('female');
   const [editPhoto, setEditPhoto] = useState('');
   const [saving, setSaving] = useState(false);
+
+  // Review state
+  const [showReviewModal, setShowReviewModal] = useState(false);
+  const [alreadyReviewed, setAlreadyReviewed] = useState(false);
 
   useEffect(() => {
     if (!user || !firestore) return;
@@ -38,6 +43,10 @@ export default function Profile({ onOpenCustomTryOn }) {
     });
     const unsubTryOns = subscribeUserTryOns(user.uid, data => setTryOns(data));
     const unsubCommunity = subscribeUserCommunityPosts(user.uid, data => setCommunityPosts(data));
+
+    // Check if user already reviewed
+    hasUserReviewed(user.uid).then(reviewed => setAlreadyReviewed(reviewed));
+
     return () => {
       unsubProfile?.();
       unsubTryOns?.();
@@ -342,6 +351,49 @@ export default function Profile({ onOpenCustomTryOn }) {
       <button className="btn-secondary" onClick={handleSignOut} style={{ width: '100%', color: theme.colors.danger, borderColor: theme.colors.dangerLight }}>
         <LogOut size={18} /> Sign Out
       </button>
+
+      {/* Rate OraNeo Button */}
+      {!alreadyReviewed && (
+        <button
+          onClick={() => setShowReviewModal(true)}
+          style={{
+            width: '100%', marginTop: '12px', padding: '16px',
+            background: 'linear-gradient(135deg, #FDF2EC, #FFF8F5)',
+            border: '1.5px solid #E6C4A8',
+            borderRadius: '16px',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px',
+            cursor: 'pointer', transition: 'all 0.2s ease',
+            fontFamily: 'inherit',
+          }}
+          onMouseEnter={e => e.currentTarget.style.boxShadow = '0 4px 16px rgba(139,74,48,0.15)'}
+          onMouseLeave={e => e.currentTarget.style.boxShadow = 'none'}
+        >
+          <div style={{ display: 'flex', gap: 2 }}>
+            {[1,2,3,4,5].map(i => <Star key={i} size={16} fill="#8b4a30" stroke="none" />)}
+          </div>
+          <span style={{ fontSize: 14, fontWeight: 800, color: '#8b4a30' }}>Rate Your Experience</span>
+        </button>
+      )}
+      {alreadyReviewed && (
+        <div style={{
+          width: '100%', marginTop: '12px', padding: '14px',
+          background: '#F0FDF4', border: '1.5px solid #86EFAC',
+          borderRadius: '16px', textAlign: 'center',
+          fontSize: 13, fontWeight: 700, color: '#16A34A',
+        }}>
+          ✅ Thanks for reviewing OraNeo!
+        </div>
+      )}
+
+      {/* Review Modal */}
+      {showReviewModal && (
+        <ReviewModal
+          user={user}
+          profile={profile}
+          onClose={() => setShowReviewModal(false)}
+          onSubmitted={() => setAlreadyReviewed(true)}
+        />
+      )}
 
       {/* Edit Profile Real-Time Modal */}
       {showEditModal && (

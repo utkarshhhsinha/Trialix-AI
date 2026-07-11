@@ -42,7 +42,7 @@ export default function Navigation({ profile, onOpenCustomTryOn, onOpenAIGen }) 
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: '24px' }}>
           <NavLink to="/discover" style={{ textDecoration: 'none' }}>
             <img 
-              src="/icon.png" 
+              src="/oraneo_logo.jpeg" 
               alt="oraneo" 
               style={{
                 width: '32px', 

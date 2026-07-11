@@ -56,67 +56,22 @@ export async function downloadTryOnImage(imageUrl) {
       }
     }
 
-    const img = new Image();
-    // Only set crossOrigin if it is a remote absolute URL and not a local blob/data URL
-    const isAbsoluteRemote = (srcUrl.startsWith('http://') || srcUrl.startsWith('https://')) && !srcUrl.startsWith(window.location.origin);
-    if (isAbsoluteRemote) {
-      img.crossOrigin = 'anonymous';
-    }
-    img.src = srcUrl;
-
-    await new Promise((resolve, reject) => {
-      img.onload = resolve;
-      img.onerror = () => reject(new Error('Image failed to load'));
-    });
-
-    const canvas = document.createElement('canvas');
-    canvas.width = img.naturalWidth;
-    canvas.height = img.naturalHeight;
-    const ctx = canvas.getContext('2d');
-    ctx.drawImage(img, 0, 0);
-
-    // Styling the watermark: "styled by 🔍 oraneo"
-    // Make size relative to image width so it scales nicely (e.g. 2.8% of image width, min 16px, max 48px)
-    const fontSize = Math.max(16, Math.min(48, Math.round(canvas.width * 0.028)));
-    ctx.font = `bold ${fontSize}px sans-serif`;
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
-
-    // Shadow for legibility on all backgrounds
-    ctx.shadowColor = 'rgba(0, 0, 0, 0.6)';
-    ctx.shadowBlur = Math.max(2, Math.round(fontSize * 0.15));
-    ctx.shadowOffsetX = Math.max(1, Math.round(fontSize * 0.08));
-    ctx.shadowOffsetY = Math.max(1, Math.round(fontSize * 0.08));
-
-    const watermarkText = 'styled by 🔍 oraneo';
-    const textWidth = ctx.measureText(watermarkText).width;
-
-    // Bottom-right placement with 3% margin
-    const margin = Math.round(canvas.width * 0.03);
-    const x = canvas.width - textWidth - margin;
-    const y = canvas.height - margin;
-
-    ctx.fillText(watermarkText, x, y);
-
-    // Export and download
-    const watermarkedBlob = await new Promise((resolve) => {
-      canvas.toBlob((b) => resolve(b), 'image/jpeg', 0.95);
-    });
-
-    const finalUrl = URL.createObjectURL(watermarkedBlob);
+    // Direct download of the blob/image since it is already watermarked at generation
     const link = document.createElement('a');
-    link.href = finalUrl;
+    link.href = srcUrl;
     link.download = `oraneo_look_${Date.now()}.jpg`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
 
     // Cleanup
-    if (objectUrl) URL.revokeObjectURL(objectUrl);
-    URL.revokeObjectURL(finalUrl);
+    if (objectUrl) {
+      setTimeout(() => URL.revokeObjectURL(objectUrl), 100);
+    }
 
     return { saved: true };
   } catch (e) {
-    console.error('[socialActions] Failed to add watermark, falling back to direct download:', e);
+    console.error('[socialActions] Failed to download, falling back to direct download:', e);
     // Fallback: direct download using simple link or new window
     try {
       const link = document.createElement('a');

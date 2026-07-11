@@ -220,8 +220,8 @@ const styles = StyleSheet.create({
   deck: { flex: 1 },
   card: {
     position: 'absolute',
-    left: 12, right: 12,
-    top: 8, bottom: 168,
+    left: 0, right: 0,
+    top: 8, bottom: 100,
   },
 
   // ── Overlays

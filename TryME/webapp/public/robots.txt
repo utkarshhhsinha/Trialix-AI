@@ -1,0 +1,13 @@
+User-agent: *
+Allow: /
+Disallow: /profile-setup
+Disallow: /login
+
+# Allow major crawlers specifically
+User-agent: Googlebot
+Allow: /
+
+User-agent: Bingbot
+Allow: /
+
+Sitemap: https://oraneo.space/sitemap.xml

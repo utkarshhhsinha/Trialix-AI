@@ -19,21 +19,63 @@ export default function App() {
   const [user, setUser] = useState(null);
   const [profile, setProfile] = useState(undefined);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
   const [trialItem, setTrialItem] = useState(null);
   const [showCustomTryOn, setShowCustomTryOn] = useState(false);
 
   useEffect(() => {
-    const unsub = onAuthStateChanged(firebaseAuth, (u) => {
+    let unsubProfile = null;
+    let timeoutId = null;
+
+    const unsubAuth = onAuthStateChanged(firebaseAuth, (u) => {
       setUser(u);
       setLoading(false);
       if (u) {
-        subscribeUserProfile(u.uid, (p) => setProfile(p));
+        // Start a 5-second timeout safeguard to prevent splash screen hang
+        timeoutId = setTimeout(() => {
+          console.warn('[App] Profile subscription timed out. Falling back.');
+          setError('Firebase profile loading is taking longer than expected. Proceeding to app...');
+          setProfile(null); // Fallback to bypass splash
+        }, 5000);
+
+        unsubProfile = subscribeUserProfile(
+          u.uid,
+          (p) => {
+            if (timeoutId) {
+              clearTimeout(timeoutId);
+              timeoutId = null;
+            }
+            setProfile(p);
+            setError(null);
+          },
+          (err) => {
+            if (timeoutId) {
+              clearTimeout(timeoutId);
+              timeoutId = null;
+            }
+            console.error('[App] Profile subscription failed:', err);
+            setError(`Firebase Connection Error: ${err.message} (${err.code})`);
+            // Fallback so the app doesn't hang on splash
+            setProfile(null);
+          }
+        );
       } else {
         setProfile(null);
+        if (unsubProfile) {
+          unsubProfile();
+          unsubProfile = null;
+        }
       }
     });
-    return () => unsub();
+    return () => {
+      unsubAuth();
+      if (unsubProfile) unsubProfile();
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+        timeoutId = null;
+      }
+    };
   }, []);
 
   const renderProtectedRoute = (element) => {
@@ -42,10 +84,10 @@ export default function App() {
     return element;
   };
 
-  if (loading || profile === undefined) {
+  if (loading || (profile === undefined && !error)) {
     return (
       <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#FAF7F4' }}>
-        <img src="/icon.png" alt="Logo" style={{ width: 64, height: 64, borderRadius: 20, animation: 'pulse 1.5s infinite' }} />
+        <img src="/oraneo_logo.jpeg" alt="Logo" style={{ width: 64, height: 64, borderRadius: 20, objectFit: 'cover', animation: 'pulse 1.5s infinite' }} />
       </div>
     );
   }
@@ -53,6 +95,16 @@ export default function App() {
   return (
     <BrowserRouter>
       <div className="app-layout">
+        {error && (
+          <div style={{
+            position: 'fixed', top: 16, left: '50%', transform: 'translateX(-50%)',
+            background: '#D93838', color: 'white', padding: '12px 24px', borderRadius: '12px',
+            zIndex: 9999, fontWeight: '700', fontSize: '13px', boxShadow: '0 8px 16px rgba(0,0,0,0.3)',
+            fontFamily: 'system-ui, sans-serif', textAlign: 'center', border: '1px solid rgba(255,255,255,0.2)'
+          }}>
+            ⚠️ {error}
+          </div>
+        )}
         {user && profile !== null && (
           <Navigation 
             profile={profile}

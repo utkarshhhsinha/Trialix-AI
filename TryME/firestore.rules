@@ -69,6 +69,20 @@ service cloud.firestore {
       allow read, write: if isOwner(userId);
     }
 
+    // Reviews — anyone can read approved reviews, signed-in users can submit once
+    match /reviews/{reviewId} {
+      allow read: if true;
+      allow create: if isSignedIn()
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.rating is int
+        && request.resource.data.rating >= 1
+        && request.resource.data.rating <= 5
+        && request.resource.data.body is string
+        && request.resource.data.body.size() >= 10
+        && request.resource.data.body.size() <= 300;
+      allow update, delete: if false;
+    }
+
     // Collection group rule to allow querying all 'likes' collections at once
     match /{path=**}/likes/{likeUserId} {
       allow read: if isSignedIn();

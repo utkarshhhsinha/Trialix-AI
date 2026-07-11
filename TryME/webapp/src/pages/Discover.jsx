@@ -126,6 +126,51 @@ export default function Discover({ profile, onOpenTrialRoom, onOpenCustomTryOn }
     fetchUserB64();
   }, [profile?.basePhotoUrl]);
 
+  // Automatically replace a failed card with a new random garment from the catalog
+  const replaceFailedCard = async (idx, failedItem) => {
+    try {
+      console.log(`[Discover] Replacing failed card ${idx}: "${failedItem.title}"`);
+      const catalog = getCatalogByGender(profile?.gender);
+
+      // Find catalog items not currently in the picks deck to prevent duplicates
+      const currentIds = new Set(picks.map(p => p.id));
+      const available = catalog.filter(item => !currentIds.has(item.id));
+
+      const docRef = doc(firestore, 'daily_picks', user.uid);
+      if (available.length === 0) {
+        console.warn('[Discover] No more available catalog items to replace failed card.');
+        // Fallback: just remove it from the deck
+        const snap = await getDoc(docRef);
+        if (snap.exists()) {
+          const data = snap.data();
+          const dbPicks = Array.isArray(data.picks) ? data.picks.filter((_, i) => i !== idx) : [];
+          await updateDoc(docRef, { picks: dbPicks });
+        }
+        return;
+      }
+
+      // Pick a random catalog item
+      const newItem = available[Math.floor(Math.random() * available.length)];
+      console.log(`[Discover] Selected replacement item: "${newItem.title}"`);
+
+      const snap = await getDoc(docRef);
+      if (snap.exists()) {
+        const data = snap.data();
+        const dbPicks = Array.isArray(data.picks) ? [...data.picks] : [];
+        if (dbPicks[idx]) {
+          dbPicks[idx] = {
+            id: newItem.id,
+            tryOnImageUrl: null
+          };
+          await updateDoc(docRef, { picks: dbPicks });
+          console.log(`[Discover] Successfully updated Firestore with replacement card at index ${idx}`);
+        }
+      }
+    } catch (err) {
+      console.error('[Discover] Failed to replace failed card:', err.message);
+    }
+  };
+
   // Generates try-on on-demand for a single card index
   const generateTryOnForCard = async (idx, currentPicks = picks) => {
     if (idx >= currentPicks.length) return;
@@ -155,19 +200,25 @@ export default function Discover({ profile, onOpenTrialRoom, onOpenCustomTryOn }
       );
       const isReal = url && url !== item.imageUrl;
       inFlightRef.current.delete(idx);
-      
+
+      if (!isReal) {
+        console.warn(`[Discover] Card ${idx} try-on is not real. Triggering replacement...`);
+        replaceFailedCard(idx, item);
+        return;
+      }
+
       // 1. Show image immediately in UI (data URI for instant display)
       setPicks(prev => prev.map((pick, i) =>
         i === idx ? {
           ...pick,
           tryOnImageUrl: url,
-          generationStatus: isReal ? 'success' : 'failed'
+          generationStatus: 'success'
         } : pick
       ));
 
       // 2. Upload data URI to Firebase Storage in background, then save the
       //    short Storage URL to Firestore daily_picks (avoids 1MB doc limit)
-      if (isReal && user && firestore && storage && url?.startsWith('data:')) {
+      if (user && firestore && storage && url?.startsWith('data:')) {
         (async () => {
           try {
             const fileName = `${user.uid}_card${idx}_${Date.now()}.jpg`;
@@ -204,14 +255,14 @@ export default function Discover({ profile, onOpenTrialRoom, onOpenCustomTryOn }
             const snapWish = await getDocs(qWish);
             if (!snapWish.empty) {
               const docRefWish = doc(firestore, 'wishlist', snapWish.docs[0].id);
-              await updateDoc(docRefWish, { tryOnImageUrl: storageUrl }).catch(() => {});
+              await updateDoc(docRefWish, { tryOnImageUrl: storageUrl }).catch(() => { });
               console.log(`[Discover] ✅ Updated tryOnImageUrl in wishlist doc for "${item.title}"`);
             }
           } catch (uploadErr) {
             console.warn(`[Discover] Card ${idx} Storage upload failed:`, uploadErr.message);
           }
         })();
-      } else if (isReal && user && firestore && url && !url.startsWith('data:')) {
+      } else if (user && firestore && url && !url.startsWith('data:')) {
         // URL is already a Storage/HTTP URL — save it directly  
         (async () => {
           try {
@@ -235,7 +286,7 @@ export default function Discover({ profile, onOpenTrialRoom, onOpenCustomTryOn }
             const snapWish = await getDocs(qWish);
             if (!snapWish.empty) {
               const docRefWish = doc(firestore, 'wishlist', snapWish.docs[0].id);
-              await updateDoc(docRefWish, { tryOnImageUrl: url }).catch(() => {});
+              await updateDoc(docRefWish, { tryOnImageUrl: url }).catch(() => { });
               console.log(`[Discover] ✅ Updated tryOnImageUrl in wishlist doc for "${item.title}"`);
             }
           } catch (err) {
@@ -247,9 +298,7 @@ export default function Discover({ profile, onOpenTrialRoom, onOpenCustomTryOn }
     } catch (err) {
       console.warn(`[AI] Card ${idx} generation failed:`, err);
       inFlightRef.current.delete(idx);
-      setPicks(prev => prev.map((pick, i) =>
-        i === idx ? { ...pick, generationStatus: 'failed' } : pick
-      ));
+      replaceFailedCard(idx, item);
     }
   };
 
@@ -288,30 +337,32 @@ export default function Discover({ profile, onOpenTrialRoom, onOpenCustomTryOn }
     currentBatchIdRef.current = batchId;
     _session.batchId = batchId; // sync to session so remounts skip generation
     inFlightRef.current.clear();
-    setInitialLoading(true);
-    
-    // Process card 0 first synchronously to show the deck ASAP
-    const item0 = itemsList[0];
-    if (item0 && (!item0.tryOnImageUrl || (item0.generationStatus !== 'success' && item0.generationStatus !== 'failed'))) {
-      await generateTryOnForCard(0, itemsList);
-      sendWebNotification('First outfit ready! ✨', 'Your first AI fit is ready to view.');
-    }
-
     setInitialLoading(false);
     isProcessingRef.current = false;
 
-    // Process remaining cards sequentially in background to avoid concurrent rate limits
+    // Process all cards sequentially in the background to prevent concurrent Vertex AI 429 rate limits
     (async () => {
-      for (let i = 1; i < itemsList.length; i++) {
+      for (let i = 0; i < itemsList.length; i++) {
         const item = itemsList[i];
         if (item && (!item.tryOnImageUrl || (item.generationStatus !== 'success' && item.generationStatus !== 'failed'))) {
           try {
+            console.log(`[Discover] Starting sequential generation for Card ${i}...`);
             await generateTryOnForCard(i, itemsList);
+            if (i === 0) {
+              sendWebNotification('First outfit ready! ✨', 'Your first AI fit is ready to view.');
+            }
           } catch (e) {
-            console.warn(`[Discover] Sequential background generation failed for card ${i}:`, e.message);
+            console.warn(`[Discover] Sequential generation failed for card ${i}:`, e.message);
+          }
+
+          if (i < itemsList.length - 1) {
+            console.log(`[Discover] Cooldown 2.5s after Card ${i} to reset rate limits...`);
+            await new Promise(r => setTimeout(r, 2500));
           }
         }
       }
+
+      console.log('[Discover] ✅ All cards generation complete');
     })();
 
     return itemsList;
@@ -337,14 +388,14 @@ export default function Discover({ profile, onOpenTrialRoom, onOpenCustomTryOn }
         // Wipe session cache
         _session.picks = null;
         _session.batchId = null;
-        
+
         let rawPicks = [];
         if (Array.isArray(data.picks)) {
           rawPicks = data.picks;
         } else if (data.picks && typeof data.picks === 'object') {
           rawPicks = Object.keys(data.picks).sort((a, b) => Number(a) - Number(b)).map(k => data.picks[k]);
         }
-        
+
         const clearedPicks = rawPicks.map(p => ({
           id: p.id,
           tryOnImageUrl: null
@@ -361,7 +412,7 @@ export default function Discover({ profile, onOpenTrialRoom, onOpenCustomTryOn }
       if (currentPhoto && !dbPhoto) {
         updateDoc(doc(firestore, 'daily_picks', user.uid), {
           generatedWithPhotoUrl: currentPhoto
-        }).catch(() => {});
+        }).catch(() => { });
       }
 
       let rawPicks = [];
@@ -398,7 +449,7 @@ export default function Discover({ profile, onOpenTrialRoom, onOpenCustomTryOn }
         const localCatalog = getCatalogByGender(profile?.gender);
         const resolvedPicks = rawPicks.map((p, idx) => {
           const match = localCatalog.find(c => c.id === p.id);
-          
+
           // Merge with session cache to avoid overwriting generated images on tab switches
           let cachedUrl = null;
           let cachedStatus = null;
@@ -416,7 +467,7 @@ export default function Discover({ profile, onOpenTrialRoom, onOpenCustomTryOn }
           const pickData = match
             ? { ...p, imageUrl: match.imageUrl, tryOnImageUrl, brand: match.brand, title: match.title, priceINR: match.priceINR, buyLink: match.buyLink || '', category: match.category || 'upper_body', gender: match.gender }
             : { ...p, tryOnImageUrl };
-            
+
           const hasImage = !!tryOnImageUrl;
           return {
             ...pickData,

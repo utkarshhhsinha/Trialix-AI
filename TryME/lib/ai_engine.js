@@ -299,7 +299,6 @@ WHAT THE FINAL IMAGE MUST SHOW (✓ = required):
 ✓ The COMPLETE garment from Image 2 — every colour, print, button, embroidery detail — fitted naturally on the body
 ✓ Full garment visible from shoulder/waist to hem — not cropped
 ✓ Bare arms and skin: If the garment in Image 2 is sleeveless, short-sleeved, off-shoulder, or strapless, you MUST completely erase the original long sleeves from the arms and render natural, clean bare skin (arms/shoulders/collarbones).
-✓ WATERMARK: In the bottom right corner of the image, add a clean, small, semi-transparent white text watermark that reads "styled by 🔍 oraneo" so the user can see it but also crop the image if needed.
 
 WHAT MUST NOT APPEAR IN THE OUTPUT (✗ = forbidden):
 ✗ Any ${stripList} from the original Image 1 — not even partially, not peeking out, not visible underneath
@@ -657,7 +656,7 @@ async function _runVirtualTryOnImpl(humanInput, garmentUrl, desc, onStatus, forc
         // Surface rate-limit errors immediately — don't waste time on the fallback
         if (nanoBananaErr.isRateLimit) throw nanoBananaErr;
         console.warn('[AI] Nano Banana direct call failed, trying Cloud Function fallback:', nanoBananaErr.message);
-        
+
         // 403/400 error indicates Google API restrictions or invalid keys — block future direct calls
         if (nanoBananaErr.message.includes('Forbidden') || nanoBananaErr.message.includes('403') || nanoBananaErr.message.includes('400')) {
           console.warn('[AI] Direct API key restricted. Blocking direct calls for this session.');

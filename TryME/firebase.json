@@ -10,7 +10,7 @@
     "rules": "storage.rules"
   },
   "hosting": {
-    "public": "dist",
+    "public": "webapp/dist",
     "ignore": [
       "firebase.json",
       "**/.*",

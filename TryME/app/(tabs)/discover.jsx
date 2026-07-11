@@ -473,6 +473,20 @@ export default function DiscoverScreen() {
 
   const fmt = s => `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
 
+  // Pulsing animation for the generating dots
+  const Animated = require('react-native').Animated;
+  const pulseAnim = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnim, { toValue: 1, duration: 700, useNativeDriver: true }),
+        Animated.timing(pulseAnim, { toValue: 0, duration: 700, useNativeDriver: true }),
+      ])
+    );
+    loop.start();
+    return () => loop.stop();
+  }, []);
+
   const renderCard = (card) => {
     if (!card) return null;
     // Always read the LATEST pick data via picksRef so live Firestore updates
@@ -585,7 +599,25 @@ export default function DiscoverScreen() {
           ) : <ActivityIndicator size="large" color="#C4785A" />}
           <Text style={s.genTitle}>Styling your looks…</Text>
           <Text style={s.genSub}>All 3 outfits generating in parallel.{'\n'}First look arrives in ~5 seconds.</Text>
-          <View style={s.genDots}>{[0, 1, 2].map(i => <View key={i} style={s.genDot} />)}</View>
+          <View style={s.genDots}>
+            {[0, 1, 2].map(i => (
+              <Animated.View
+                key={i}
+                style={[s.genDot, {
+                  opacity: pulseAnim.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: i === 1 ? [1, 0.2] : [0.3 + i * 0.2, 0.8 - i * 0.2],
+                  }),
+                  transform: [{
+                    scale: pulseAnim.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: i === 1 ? [1, 1.5] : [0.8, 1.2],
+                    }),
+                  }],
+                }]}
+              />
+            ))}
+          </View>
         </View>
       </View>
     );
@@ -654,21 +686,23 @@ export default function DiscoverScreen() {
               overlayLabels={{ right: '♥ SAVE', left: '✕ SKIP', up: '⭐ SUPER LIKE' }}
             />
             <View style={s.bottomControlBar}>
-              <Pressable style={s.rewindBtn} onPress={handleRewind}>
-                <Ionicons name="arrow-undo-outline" size={20} color="#FEDB49" />
-              </Pressable>
-              <Pressable style={s.nopeBtn} onPress={() => deckRef.current?.swipeLeft()}>
-                <Ionicons name="close-outline" size={32} color="#FF5A5F" />
-              </Pressable>
-              <Pressable style={s.superLikeBtn} onPress={() => deckRef.current?.swipeUp()}>
-                <Ionicons name="star" size={24} color="#29B6F6" />
-              </Pressable>
-              <Pressable style={s.heartBtn} onPress={() => deckRef.current?.swipeRight()}>
-                <Ionicons name="heart" size={30} color="#00E676" />
-              </Pressable>
-              <Pressable style={s.boostBtn} onPress={handleBoost}>
-                <Ionicons name="flash-outline" size={20} color="#A855F7" />
-              </Pressable>
+              <BlurView intensity={60} tint="dark" style={s.controlPill}>
+                <Pressable style={s.rewindBtn} onPress={handleRewind}>
+                  <Ionicons name="arrow-undo-outline" size={20} color="#FEDB49" />
+                </Pressable>
+                <Pressable style={s.nopeBtn} onPress={() => deckRef.current?.swipeLeft()}>
+                  <Ionicons name="close-outline" size={32} color="#FF5A5F" />
+                </Pressable>
+                <Pressable style={s.superLikeBtn} onPress={() => deckRef.current?.swipeUp()}>
+                  <Ionicons name="star" size={24} color="#29B6F6" />
+                </Pressable>
+                <Pressable style={s.heartBtn} onPress={() => deckRef.current?.swipeRight()}>
+                  <Ionicons name="heart" size={30} color="#00E676" />
+                </Pressable>
+                <Pressable style={s.boostBtn} onPress={handleBoost}>
+                  <Ionicons name="flash-outline" size={20} color="#A855F7" />
+                </Pressable>
+              </BlurView>
             </View>
           </>
         ) : null}
@@ -709,12 +743,12 @@ const s = StyleSheet.create({
   logoAI: { fontSize: 12, fontWeight: '800', color: '#C4785A', letterSpacing: 1 },
   batchBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 12, paddingVertical: 6, backgroundColor: 'rgba(196,120,90,0.15)', borderRadius: 20, borderWidth: 1, borderColor: 'rgba(196,120,90,0.3)' },
   batchBadgeText: { fontSize: 12, fontWeight: '800', color: '#C4785A' },
-  deckWrap: { flex: 1, paddingHorizontal: 0, paddingTop: 0, paddingBottom: 0 },
-  card: { flex: 1, overflow: 'hidden', backgroundColor: '#111', shadowColor: '#000', shadowOffset: { width: 0, height: 20 }, shadowOpacity: 0.6, shadowRadius: 40, elevation: 20, borderRadius: 24, borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)' },
+  deckWrap: { flex: 1, paddingHorizontal: 12, paddingTop: 8, paddingBottom: 0 },
+  card: { flex: 1, overflow: 'hidden', backgroundColor: '#111', shadowColor: '#000', shadowOffset: { width: 0, height: 20 }, shadowOpacity: 0.6, shadowRadius: 40, elevation: 20, borderRadius: 28, borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)', borderTopColor: 'rgba(255,255,255,0.18)' },
   aiBadge: { position: 'absolute', top: 16, right: 16, zIndex: 2, flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: 'rgba(0,0,0,0.6)', paddingHorizontal: 12, paddingVertical: 7, borderRadius: 20, borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)' },
   aiBadgeText: { color: '#E8A882', fontSize: 11, fontWeight: '900', letterSpacing: 1 },
-  cardInfoContainer: { position: 'absolute', bottom: 16, left: 16, right: 16, borderRadius: 24, overflow: 'hidden', borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)' },
-  cardInfoBlur: { padding: 20, gap: 12 },
+  cardInfoContainer: { position: 'absolute', bottom: 100, left: 16, right: 16, borderRadius: 24, overflow: 'hidden', borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)' },
+  cardInfoBlur: { padding: 20, gap: 10 },
   cardBrand: { fontSize: 11, fontWeight: '800', color: '#E8A882', letterSpacing: 3 },
   cardTitle: { fontSize: 24, fontWeight: '900', color: 'white', lineHeight: 30, letterSpacing: -0.3 },
   cardRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
@@ -723,19 +757,27 @@ const s = StyleSheet.create({
   buyBtn: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 16, paddingVertical: 8, borderRadius: 14, backgroundColor: 'rgba(255,255,255,0.12)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.25)' },
   buyBtnText: { color: 'white', fontWeight: '700', fontSize: 14 },
   actionBar: { flexDirection: 'row', gap: 8 },
-  actionBarBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, paddingVertical: 10, borderRadius: 16, backgroundColor: 'rgba(255,255,255,0.08)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)' },
+  actionBarBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, paddingVertical: 14, borderRadius: 16, backgroundColor: 'rgba(255,255,255,0.08)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)' },
   actionBarLabel: { color: 'white', fontSize: 13, fontWeight: '700' },
   swipeBtns: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 4 },
   bottomControlBar: {
     position: 'absolute',
-    bottom: 90,
-    left: 0,
-    right: 0,
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: 16,
+    bottom: 12,
+    left: 20,
+    right: 20,
     zIndex: 200,
+  },
+  controlPill: {
+    flexDirection: 'row',
+    justifyContent: 'space-evenly',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 8,
+    borderRadius: 40,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
+    backgroundColor: 'rgba(15,15,15,0.55)',
   },
   rewindBtn: {
     width: 46,

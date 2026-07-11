@@ -1,32 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Heart, X, Sparkles, ShoppingBag, Star, Download, Share2, Send, Loader2, Cpu } from 'lucide-react';
 import theme from '../theme';
+import { downloadWithWatermark } from '../lib/watermark';
 
 const downloadImageToLocal = async (imageUrl, fileName = 'tryon-look.jpg') => {
-  if (!imageUrl) return;
-  if (imageUrl.startsWith('data:')) {
-    const link = document.createElement('a');
-    link.href = imageUrl;
-    link.download = fileName;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    return;
-  }
-  try {
-    const response = await fetch(imageUrl);
-    const blob = await response.blob();
-    const blobUrl = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = blobUrl;
-    link.download = fileName;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(blobUrl);
-  } catch {
-    window.open(imageUrl, '_blank');
-  }
+  // Use watermark utility for downloads
+  await downloadWithWatermark(imageUrl, fileName);
 };
 
 const SWIPE_THRESHOLD = 90; // px drag needed to trigger action
@@ -244,7 +223,7 @@ export default function SwipeDeck({
             animation: 'shimmer 2s ease-in-out infinite',
           }} />
         )}
-            
+
         {/* Top Badge */}
         <div style={{
           position: 'absolute', top: 16, right: 16, zIndex: 10,
@@ -256,11 +235,11 @@ export default function SwipeDeck({
           letterSpacing: '1px'
         }}>
           {(currentItem.generationStatus === 'pending' || currentItem.generationStatus === 'queued') ? (
-            <><Loader2 size={12} color="#E8A882" style={{ animation: 'spin 1s linear infinite' }} /><span style={{color: '#E8A882'}}>GENERATING…</span></>
+            <><Loader2 size={12} color="#E8A882" style={{ animation: 'spin 1s linear infinite' }} /><span style={{ color: '#E8A882' }}>GENERATING…</span></>
           ) : currentItem.generationStatus === 'failed' ? (
-            <><Sparkles size={12} color="#888" /><span style={{color: '#aaa'}}>PREVIEW</span></>
+            <><Sparkles size={12} color="#888" /><span style={{ color: '#aaa' }}>PREVIEW</span></>
           ) : (
-            <><Sparkles size={12} color="#E8A882" /><span style={{color: '#E8A882'}}>AI PICK</span></>
+            <><Sparkles size={12} color="#E8A882" /><span style={{ color: '#E8A882' }}>AI PICK</span></>
           )}
         </div>
 
@@ -312,11 +291,34 @@ export default function SwipeDeck({
             <button
               onClick={(e) => {
                 e.stopPropagation();
-                const targetUrl = currentItem.tryOnImageUrl || currentItem.imageUrl;
-                if (targetUrl) downloadImageToLocal(targetUrl, `${currentItem.title.replace(/\s+/g, '_')}_look.jpg`);
-                onSave?.(currentItem);
+                // Only download if we have a REAL AI-generated try-on (not the garment fallback)
+                const targetUrl = currentItem.tryOnImageUrl;
+                const isRealResult = targetUrl && targetUrl !== currentItem.imageUrl;
+                if (isRealResult) {
+                  downloadImageToLocal(targetUrl, `${currentItem.title.replace(/\s+/g, '_')}_tryon_by_oraneo.jpg`);
+                  onSave?.(currentItem);
+                } else {
+                  // Don't download if try-on hasn't generated yet
+                  alert('⏳ AI try-on still generating... Please wait a moment!');
+                }
               }}
-              style={{ flex: 1, background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.12)', color: 'white', padding: '8px', borderRadius: '14px', fontSize: '12px', fontWeight: '700', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px', cursor: 'pointer' }}
+              disabled={!currentItem.tryOnImageUrl || currentItem.tryOnImageUrl === currentItem.imageUrl}
+              style={{ 
+                flex: 1, 
+                background: 'rgba(255,255,255,0.08)', 
+                border: '1px solid rgba(255,255,255,0.12)', 
+                color: 'white', 
+                padding: '8px', 
+                borderRadius: '14px', 
+                fontSize: '12px', 
+                fontWeight: '700', 
+                display: 'flex', 
+                alignItems: 'center', 
+                justifyContent: 'center', 
+                gap: '4px', 
+                cursor: (!currentItem.tryOnImageUrl || currentItem.tryOnImageUrl === currentItem.imageUrl) ? 'not-allowed' : 'pointer',
+                opacity: (!currentItem.tryOnImageUrl || currentItem.tryOnImageUrl === currentItem.imageUrl) ? 0.5 : 1
+              }}
             >
               <Download size={14} /> Save
             </button>

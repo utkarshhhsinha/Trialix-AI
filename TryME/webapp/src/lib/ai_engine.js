@@ -98,40 +98,53 @@ export async function getCleanBase64(input, width = 512, height = 640, mode = 'f
       }
     };
 
-    // Helper to resize image using canvas
+    // Helper to resize image using canvas with a 6-second timeout safeguard
     const resizeImage = (imgSrc, isCrossOrigin = false) => {
       return new Promise((resolve) => {
         const img = new Image();
+        const timeout = setTimeout(() => {
+          console.warn('[AI Canvas] resizeImage timed out for:', imgSrc.slice(0, 100));
+          img.src = '';
+          resolve('');
+        }, 6000);
+
         if (isCrossOrigin) {
           img.crossOrigin = 'Anonymous';
         }
         img.onload = () => {
-          const canvas = document.createElement('canvas');
-          canvas.width = width;
-          canvas.height = height;
-          const ctx = canvas.getContext('2d');
+          clearTimeout(timeout);
+          try {
+            const canvas = document.createElement('canvas');
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext('2d');
 
-          // Clear with white background (standard for JPEGs)
-          ctx.fillStyle = '#FFFFFF';
-          ctx.fillRect(0, 0, width, height);
+            // Clear with white background (standard for JPEGs)
+            ctx.fillStyle = '#FFFFFF';
+            ctx.fillRect(0, 0, width, height);
 
-          const imgWidth = img.width || width;
-          const imgHeight = img.height || height;
+            const imgWidth = img.width || width;
+            const imgHeight = img.height || height;
 
-          if (mode === 'fit') {
-            const scale = Math.min(width / imgWidth, height / imgHeight);
-            const x = (width - imgWidth * scale) / 2;
-            const y = (height - imgHeight * scale) / 2;
-            ctx.drawImage(img, x, y, imgWidth * scale, imgHeight * scale);
-          } else {
-            ctx.drawImage(img, 0, 0, width, height);
+            if (mode === 'fit') {
+              const scale = Math.min(width / imgWidth, height / imgHeight);
+              const x = (width - imgWidth * scale) / 2;
+              const y = (height - imgHeight * scale) / 2;
+              ctx.drawImage(img, x, y, imgWidth * scale, imgHeight * scale);
+            } else {
+              ctx.drawImage(img, 0, 0, width, height);
+            }
+
+            const dataUrl = canvas.toDataURL('image/jpeg', quality);
+            const base64 = dataUrl.split('base64,')[1] || '';
+            resolve(base64);
+          } catch (canvasErr) {
+            console.error('[AI Canvas] canvas draw failed:', canvasErr.message);
+            resolve('');
           }
-
-          const dataUrl = canvas.toDataURL('image/jpeg', quality);
-          const base64 = dataUrl.split('base64,')[1] || '';
-          resolve(base64);
         };
         img.onerror = () => {
+          clearTimeout(timeout);
           resolve('');
         };
         img.src = imgSrc;
@@ -200,7 +213,7 @@ export async function getCleanBase64(input, width = 512, height = 640, mode = 'f
   }
 }
 
-function isValidTryOnResult(resultUrl, garmentUrl, humanB64, humanInput) {
+async function isValidTryOnResult(resultUrl, garmentUrl, humanB64, humanInput, garmentB64 = null) {
   if (!resultUrl) return false;
   if (resultUrl === garmentUrl) return false;
   if (humanInput && resultUrl === humanInput) {
@@ -209,7 +222,146 @@ function isValidTryOnResult(resultUrl, garmentUrl, humanB64, humanInput) {
   }
   // Data URI too short = probably empty or corrupted
   if (resultUrl.startsWith('data:') && resultUrl.length < 8000) return false;
-  // Detect if model returned the original base photo unchanged:
+
+  // Self-heal: resolve garment base64
+  let resolvedGarmentB64 = garmentB64;
+  if (!resolvedGarmentB64 && garmentUrl && garmentUrl.length > 1000 && !garmentUrl.startsWith('http') && !garmentUrl.startsWith('/') && !garmentUrl.startsWith('data:')) {
+    resolvedGarmentB64 = garmentUrl;
+  } else if (!resolvedGarmentB64 && garmentUrl && garmentUrl.startsWith('data:')) {
+    resolvedGarmentB64 = garmentUrl.split('base64,')[1] || '';
+  }
+
+  // 🔥 Visual similarity comparison using browser Canvas API (detects identical/unmodified outputs)
+  if (resultUrl && (humanB64 || (humanInput && humanInput.startsWith('data:')))) {
+    try {
+      const srcHuman = humanB64 ? `data:image/jpeg;base64,${humanB64}` : humanInput;
+      const srcResult = resultUrl;
+
+      // 1. Compare against Human Base Photo
+      const distHuman = await new Promise((resolve) => {
+        const img1 = new Image();
+        const img2 = new Image();
+        let loaded = 0;
+
+        const checkDist = () => {
+          try {
+            const canvas1 = document.createElement('canvas');
+            const canvas2 = document.createElement('canvas');
+            canvas1.width = 16;
+            canvas1.height = 16;
+            canvas2.width = 16;
+            canvas2.height = 16;
+
+            const ctx1 = canvas1.getContext('2d');
+            const ctx2 = canvas2.getContext('2d');
+
+            ctx1.drawImage(img1, 0, 0, 16, 16);
+            ctx2.drawImage(img2, 0, 0, 16, 16);
+
+            const data1 = ctx1.getImageData(0, 0, 16, 16).data;
+            const data2 = ctx2.getImageData(0, 0, 16, 16).data;
+
+            let totalDist = 0;
+            for (let i = 0; i < data1.length; i += 4) {
+              const dR = data1[i] - data2[i];
+              const dG = data1[i+1] - data2[i+1];
+              const dB = data1[i+2] - data2[i+2];
+              totalDist += Math.sqrt(dR*dR + dG*dG + dB*dB);
+            }
+
+            const avg = totalDist / (data1.length / 4);
+            resolve(avg);
+          } catch (err) {
+            console.warn('[AI Validation] Canvas comparison failed (possibly tainted canvas):', err.message);
+            resolve(999);
+          }
+        };
+
+        img1.crossOrigin = 'anonymous';
+        img2.crossOrigin = 'anonymous';
+
+        img1.onload = () => { loaded++; if (loaded === 2) checkDist(); };
+        img2.onload = () => { loaded++; if (loaded === 2) checkDist(); };
+        img1.onerror = () => resolve(999);
+        img2.onerror = () => resolve(999);
+
+        img1.src = srcHuman;
+        img2.src = srcResult;
+      });
+
+      console.log(`[AI Validation] Client visual RGB distance from Human: ${distHuman.toFixed(2)}`);
+      if (distHuman < 12.0) {
+        console.warn(`[AI Validation] ❌ Rejected visually (distance from Human: ${distHuman.toFixed(2)}) — unmodified photo returned.`);
+        return false;
+      }
+
+      // 2. Compare against Garment Catalog Photo
+      if (resolvedGarmentB64 && resolvedGarmentB64.length > 1000) {
+        const srcGarment = `data:image/jpeg;base64,${resolvedGarmentB64}`;
+        const distGarment = await new Promise((resolve) => {
+          const img1 = new Image();
+          const img2 = new Image();
+          let loaded = 0;
+
+          const checkDist = () => {
+            try {
+              const canvas1 = document.createElement('canvas');
+              const canvas2 = document.createElement('canvas');
+              canvas1.width = 16;
+              canvas1.height = 16;
+              canvas2.width = 16;
+              canvas2.height = 16;
+
+              const ctx1 = canvas1.getContext('2d');
+              const ctx2 = canvas2.getContext('2d');
+
+              ctx1.drawImage(img1, 0, 0, 16, 16);
+              ctx2.drawImage(img2, 0, 0, 16, 16);
+
+              const data1 = ctx1.getImageData(0, 0, 16, 16).data;
+              const data2 = ctx2.getImageData(0, 0, 16, 16).data;
+
+              let totalDist = 0;
+              for (let i = 0; i < data1.length; i += 4) {
+                const dR = data1[i] - data2[i];
+                const dG = data1[i+1] - data2[i+1];
+                const dB = data1[i+2] - data2[i+2];
+                totalDist += Math.sqrt(dR*dR + dG*dG + dB*dB);
+              }
+
+              const avg = totalDist / (data1.length / 4);
+              resolve(avg);
+            } catch (err) {
+              console.warn('[AI Validation] Garment canvas comparison failed:', err.message);
+              resolve(999);
+            }
+          };
+
+          img1.crossOrigin = 'anonymous';
+          img2.crossOrigin = 'anonymous';
+
+          img1.onload = () => { loaded++; if (loaded === 2) checkDist(); };
+          img2.onload = () => { loaded++; if (loaded === 2) checkDist(); };
+          img1.onerror = () => resolve(999);
+          img2.onerror = () => resolve(999);
+
+          img1.src = srcGarment;
+          img2.src = srcResult;
+        });
+
+        console.log(`[AI Validation] Client visual RGB distance from Garment: ${distGarment.toFixed(2)}`);
+        if (distGarment < 12.0) {
+          console.warn(`[AI Validation] ❌ Rejected visually (distance from Garment: ${distGarment.toFixed(2)}) — unmodified garment photo returned.`);
+          return false;
+        }
+      }
+
+    } catch (e) {
+      console.warn('[AI Validation] Visual similarity check error:', e.message);
+    }
+  }
+
+  // Fallback: binary check
   if (resultUrl.startsWith('data:') && humanB64 && humanB64.length > 5000) {
     const resultB64 = resultUrl.split('base64,')[1] || '';
     const lenDiff = Math.abs(resultB64.length - humanB64.length);
@@ -615,7 +767,7 @@ async function _runVirtualTryOnImpl(humanInput, garmentUrl, desc, onStatus, forc
 
   try {
     const result = await withTimeout(runGen(false), 35000, 'Try-on');
-    if (isValidTryOnResult(result, garmentHttpUrl, humanB64, actualHumanInput)) {
+    if (await isValidTryOnResult(result, garmentHttpUrl, humanB64, actualHumanInput, garmentB64)) {
       return result;
     }
     // Result invalid — return null without retrying to avoid doubling wait time
