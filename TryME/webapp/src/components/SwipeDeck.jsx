@@ -58,14 +58,12 @@ export default function SwipeDeck({
 
   // ── Image decision ───────────────────────────────────────────────
   const tryOnUrl = currentItem.tryOnImageUrl;
-  const isRealTryOn = tryOnUrl && tryOnUrl !== currentItem.imageUrl;
+  const isRealTryOn = tryOnUrl && tryOnUrl !== currentItem.imageUrl && tryOnUrl !== 'failed';
   const status = currentItem.generationStatus; // 'pending' | 'queued' | 'success' | 'failed'
 
   // isGenerating = true while card is actively pending
   const isGenerating = status === 'pending';
 
-  // Base layer is ALWAYS the user's own photo — never the garment catalog photo
-  // This prevents the garment image from ever flashing on screen
   const baseImage = userPhotoUrl || currentItem.imageUrl;
 
   // ── Swipe indicator derived values ──────────────────────────────
@@ -114,7 +112,7 @@ export default function SwipeDeck({
   };
 
   return (
-    <div style={{ position: 'relative', width: '100%', maxWidth: '420px', margin: '0 auto' }}>
+    <div style={{ position: 'relative', width: '100%', maxWidth: '420px', margin: '0 auto', flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
 
       {/* ── Swipe Hint Labels ───────────────────────────────────── */}
       {isSwipingRight && drag.active && (
@@ -154,7 +152,8 @@ export default function SwipeDeck({
         onTransitionEnd={handleTransitionEnd}
         style={{
           position: 'relative',
-          height: '560px',
+          flex: 1,
+          minHeight: 0,
           borderRadius: '28px',
           overflow: 'hidden',
           boxShadow: drag.active

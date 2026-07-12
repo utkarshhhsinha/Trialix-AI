@@ -111,13 +111,14 @@ export default function Discover({ profile, onOpenTrialRoom, onOpenCustomTryOn }
     };
   }, []);
 
-  // Pre-fetch user photo base64 at the SAME resolution used by the AI engine (384x512)
+  // Pre-fetch user photo base64 at 448x600 for faster generation
   useEffect(() => {
     if (!profile?.basePhotoUrl) return;
     const fetchUserB64 = async () => {
       try {
         const { getCleanBase64 } = await import('../lib/ai_engine');
-        const b64 = await getCleanBase64(profile.basePhotoUrl, 384, 512, 'fit', 0.80);
+        // 512x640 is the standard VTON resolution for maximum generation accuracy
+        const b64 = await getCleanBase64(profile.basePhotoUrl, 512, 640, 'cover', 0.80);
         if (b64) setCachedUserB64(`data:image/jpeg;base64,${b64}`);
       } catch (e) {
         console.warn('[AI] User photo pre-fetch failed:', e.message);
@@ -198,12 +199,45 @@ export default function Discover({ profile, onOpenTrialRoom, onOpenCustomTryOn }
         item.category || 'upper_body',
         profile?.gender || 'female'
       );
-      const isReal = url && url !== item.imageUrl;
+      if (!url) {
+        console.warn(`[Discover] Card ${idx} generation failed (null response). Leaving as retriable.`);
+        setPicks(prev => prev.map((pick, i) =>
+          i === idx ? { ...pick, tryOnImageUrl: null, generationStatus: 'queued' } : pick
+        ));
+        inFlightRef.current.delete(idx);
+        setInitialLoading(false);
+        return;
+      }
+
+      const isReal = url !== item.imageUrl;
       inFlightRef.current.delete(idx);
 
       if (!isReal) {
-        console.warn(`[Discover] Card ${idx} try-on is not real. Triggering replacement...`);
-        replaceFailedCard(idx, item);
+        console.warn(`[Discover] Card ${idx} try-on is not real. Marking as failed (no replacement).`);
+        setPicks(prev => prev.map((pick, i) =>
+          i === idx ? { ...pick, tryOnImageUrl: 'failed', generationStatus: 'failed' } : pick
+        ));
+        setInitialLoading(false);
+        // Save the failure state persistently in Firestore to avoid infinite generation loops on reload
+        if (user && firestore) {
+          (async () => {
+            try {
+              const docRef = doc(firestore, 'daily_picks', user.uid);
+              const snap = await getDoc(docRef);
+              if (snap.exists()) {
+                const data = snap.data();
+                const dbPicks = Array.isArray(data.picks) ? [...data.picks] : [];
+                if (dbPicks[idx]) {
+                  dbPicks[idx] = { ...dbPicks[idx], tryOnImageUrl: 'failed' };
+                  await updateDoc(docRef, { picks: dbPicks });
+                  console.log(`[Discover] ✅ Persisted Card ${idx} failure state in Firestore.`);
+                }
+              }
+            } catch (dbErr) {
+              console.warn('[Discover] Failed to persist failure state in Firestore:', dbErr.message);
+            }
+          })();
+        }
         return;
       }
 
@@ -215,6 +249,7 @@ export default function Discover({ profile, onOpenTrialRoom, onOpenCustomTryOn }
           generationStatus: 'success'
         } : pick
       ));
+      setInitialLoading(false);
 
       // 2. Upload data URI to Firebase Storage in background, then save the
       //    short Storage URL to Firestore daily_picks (avoids 1MB doc limit)
@@ -222,11 +257,15 @@ export default function Discover({ profile, onOpenTrialRoom, onOpenCustomTryOn }
         (async () => {
           try {
             const fileName = `${user.uid}_card${idx}_${Date.now()}.jpg`;
-            const sRef = ref(storage, `daily-picks/${fileName}`);
+            const sRef = ref(storage, `daily_picks/${fileName}`);
             const cleanB64 = url.split('base64,')[1] || url;
             await uploadString(sRef, cleanB64, 'base64', { contentType: 'image/jpeg' });
             const storageUrl = await getDownloadURL(sRef);
             console.log(`[Discover] ✅ Card ${idx} uploaded to Storage:`, storageUrl);
+
+            // Preload the storage URL in the background to prevent any flicker during state transition
+            const preloadImg = new Image();
+            preloadImg.src = storageUrl;
 
             // Update picks state to use Storage URL (more stable than data URI)
             setPicks(prev => prev.map((pick, i) =>
@@ -298,7 +337,10 @@ export default function Discover({ profile, onOpenTrialRoom, onOpenCustomTryOn }
     } catch (err) {
       console.warn(`[AI] Card ${idx} generation failed:`, err);
       inFlightRef.current.delete(idx);
-      replaceFailedCard(idx, item);
+      setPicks(prev => prev.map((pick, i) =>
+        i === idx ? { ...pick, generationStatus: 'failed' } : pick
+      ));
+      setInitialLoading(false);
     }
   };
 
@@ -307,18 +349,7 @@ export default function Discover({ profile, onOpenTrialRoom, onOpenCustomTryOn }
     if (!itemsList || itemsList.length === 0) return itemsList;
     if (isProcessingRef.current && currentBatchIdRef.current === batchId) return itemsList;
 
-    // If session cache already has this exact batch with generated images, restore and skip
-    if (_session.batchId === batchId && _session.picks && _session.picks.length > 0) {
-      const sessionHasImages = _session.picks.some(p => p.tryOnImageUrl && p.generationStatus === 'success');
-      if (sessionHasImages) {
-        console.log('[Discover] Session cache hit — restoring picks without regeneration.');
-        currentBatchIdRef.current = batchId;
-        setPicks(_session.picks);
-        setCurrentIndex(_session.currentIndex);
-        setInitialLoading(false);
-        return _session.picks;
-      }
-    }
+
 
     // If ALL picks already have generated images (loaded from Firestore), skip generation
     const allAlreadyGenerated = itemsList.every(item =>
@@ -337,33 +368,60 @@ export default function Discover({ profile, onOpenTrialRoom, onOpenCustomTryOn }
     currentBatchIdRef.current = batchId;
     _session.batchId = batchId; // sync to session so remounts skip generation
     inFlightRef.current.clear();
-    setInitialLoading(false);
-    isProcessingRef.current = false;
+    const hasAnyCompleted = itemsList.some(item =>
+      item.generationStatus === 'success' || item.generationStatus === 'failed'
+    );
+    if (hasAnyCompleted) {
+      setInitialLoading(false);
+    }
 
-    // Process all cards sequentially in the background to prevent concurrent Vertex AI 429 rate limits
-    (async () => {
-      for (let i = 0; i < itemsList.length; i++) {
-        const item = itemsList[i];
-        if (item && (!item.tryOnImageUrl || (item.generationStatus !== 'success' && item.generationStatus !== 'failed'))) {
-          try {
+    // Safety: if card 0 hasn't resolved within 35 seconds, show the deck anyway
+    // (prevents infinite loading screen if the API stalls or times out)
+    const safetyTimer = setTimeout(() => {
+      console.warn('[Discover] Safety timer fired — forcing deck visible after 35s');
+      setInitialLoading(false);
+    }, 35000);
+
+    // Generate ALL cards sequentially (one by one) to avoid rate limits
+    const runGeneration = async () => {
+      try {
+        for (let i = 0; i < itemsList.length; i++) {
+          const item = itemsList[i];
+          if (item && (!item.tryOnImageUrl || (item.generationStatus !== 'success' && item.generationStatus !== 'failed'))) {
             console.log(`[Discover] Starting sequential generation for Card ${i}...`);
-            await generateTryOnForCard(i, itemsList);
-            if (i === 0) {
+            try {
+              await generateTryOnForCard(i, itemsList);
+              clearTimeout(safetyTimer);
+              setInitialLoading(false);  // Reveal deck immediately
               sendWebNotification('First outfit ready! ✨', 'Your first AI fit is ready to view.');
+            } catch (e) {
+              console.warn(`[Discover] Sequential generation failed for card ${i}:`, e.message);
+              clearTimeout(safetyTimer);
+              setInitialLoading(false);
             }
-          } catch (e) {
-            console.warn(`[Discover] Sequential generation failed for card ${i}:`, e.message);
-          }
-
-          if (i < itemsList.length - 1) {
-            console.log(`[Discover] Cooldown 2.5s after Card ${i} to reset rate limits...`);
-            await new Promise(r => setTimeout(r, 2500));
+            
+            // Add a cooldown between sequential generations to reset the Vertex AI rate limit
+            if (i < itemsList.length - 1) {
+              console.log('[Discover] Cooldown for 5 seconds to reset Vertex AI rate limit...');
+              await new Promise(r => setTimeout(r, 5000));
+            }
           }
         }
+      } catch (outerErr) {
+        console.error('[Discover] Sequential generation crashed:', outerErr);
+      } finally {
+        isProcessingRef.current = false;
+        // In case the generation completed/failed, ensure we hide loading state if any card is ready
+        const hasAnyCompleted = itemsList.some(item =>
+          item.generationStatus === 'success' || item.generationStatus === 'failed'
+        );
+        if (hasAnyCompleted) {
+          clearTimeout(safetyTimer);
+          setInitialLoading(false);
+        }
       }
-
-      console.log('[Discover] ✅ All cards generation complete');
-    })();
+    };
+    runGeneration();
 
     return itemsList;
   };
@@ -374,20 +432,47 @@ export default function Discover({ profile, onOpenTrialRoom, onOpenCustomTryOn }
   useEffect(() => {
     if (!user || !firestore || !profile) return;
     const unsub = onSnapshot(doc(firestore, 'daily_picks', user.uid), snap => {
-      if (!snap.exists()) {
-        loadGenderCatalog();
-        return;
-      }
-      const data = snap.data();
-      const currentPhoto = profile?.basePhotoUrl || null;
-      const dbPhoto = data.generatedWithPhotoUrl || null;
+      try {
+        if (!snap.exists()) {
+          loadGenderCatalog();
+          return;
+        }
+        const data = snap.data();
+        const currentPhoto = profile?.basePhotoUrl || null;
+        const dbPhoto = data.generatedWithPhotoUrl || null;
 
-      // Invalidate generated images if base photo changed
-      if (currentPhoto && dbPhoto && dbPhoto !== currentPhoto) {
-        console.log('[Discover] Base photo changed. Invalidating generated images to force regeneration.');
-        // Wipe session cache
-        _session.picks = null;
-        _session.batchId = null;
+        // Invalidate generated images if base photo changed
+        if (currentPhoto && dbPhoto && dbPhoto !== currentPhoto) {
+          console.log('[Discover] Base photo changed. Invalidating generated images to force regeneration.');
+          // Wipe session cache
+          _session.picks = null;
+          _session.batchId = null;
+
+          let rawPicks = [];
+          if (Array.isArray(data.picks)) {
+            rawPicks = data.picks;
+          } else if (data.picks && typeof data.picks === 'object') {
+            rawPicks = Object.keys(data.picks).sort((a, b) => Number(a) - Number(b)).map(k => data.picks[k]);
+          }
+
+          const clearedPicks = rawPicks.map(p => ({
+            id: p.id,
+            tryOnImageUrl: null
+          }));
+
+          updateDoc(doc(firestore, 'daily_picks', user.uid), {
+            picks: clearedPicks,
+            generatedWithPhotoUrl: currentPhoto
+          }).catch(err => console.warn('[Discover] Failed to invalidate pics:', err));
+          return;
+        }
+
+        // Initialize generatedWithPhotoUrl if missing
+        if (currentPhoto && !dbPhoto) {
+          updateDoc(doc(firestore, 'daily_picks', user.uid), {
+            generatedWithPhotoUrl: currentPhoto
+          }).catch(() => { });
+        }
 
         let rawPicks = [];
         if (Array.isArray(data.picks)) {
@@ -396,96 +481,92 @@ export default function Discover({ profile, onOpenTrialRoom, onOpenCustomTryOn }
           rawPicks = Object.keys(data.picks).sort((a, b) => Number(a) - Number(b)).map(k => data.picks[k]);
         }
 
-        const clearedPicks = rawPicks.map(p => ({
-          id: p.id,
-          tryOnImageUrl: null
-        }));
-
-        updateDoc(doc(firestore, 'daily_picks', user.uid), {
-          picks: clearedPicks,
-          generatedWithPhotoUrl: currentPhoto
-        }).catch(err => console.warn('[Discover] Failed to invalidate pics:', err));
-        return;
-      }
-
-      // Initialize generatedWithPhotoUrl if missing
-      if (currentPhoto && !dbPhoto) {
-        updateDoc(doc(firestore, 'daily_picks', user.uid), {
-          generatedWithPhotoUrl: currentPhoto
-        }).catch(() => { });
-      }
-
-      let rawPicks = [];
-      if (Array.isArray(data.picks)) {
-        rawPicks = data.picks;
-      } else if (data.picks && typeof data.picks === 'object') {
-        rawPicks = Object.keys(data.picks).sort((a, b) => Number(a) - Number(b)).map(k => data.picks[k]);
-      }
-
-      const nextBatch = data.nextBatchAt?.toMillis?.() ?? (data.nextBatchAt?.seconds ? data.nextBatchAt.seconds * 1000 : null);
-      if (data.seenAt && data.status === 'ready' && nextBatch && Date.now() < nextBatch) {
-        setNextBatchAt(nextBatch);
-        setShowDoneModal(true);
-        return;
-      }
-
-      if (rawPicks.length > 0) {
-        // Check if the loaded picks match the user's current profile gender
-        const gender = (profile?.gender || '').toLowerCase().trim();
-        const mismatch = (
-          ((gender === 'male' || gender === 'man' || gender === 'men') && !rawPicks[0]?.id?.startsWith('m')) ||
-          ((gender === 'female' || gender === 'woman' || gender === 'women') && !rawPicks[0]?.id?.startsWith('wt'))
-        );
-
-        if (mismatch) {
-          console.log('[Discover] Gender mismatch detected in Firestore picks. Regenerating...');
-          loadGenderCatalog();
+        const nextBatch = data.nextBatchAt?.toMillis?.() ?? (data.nextBatchAt?.seconds ? data.nextBatchAt.seconds * 1000 : null);
+        if (data.seenAt && data.status === 'ready' && nextBatch && Date.now() < nextBatch) {
+          setNextBatchAt(nextBatch);
+          setShowDoneModal(true);
+          setInitialLoading(false); // Hide overlay so Done modal is visible!
           return;
         }
 
-        // Build a stable batch ID from the pick IDs so we can detect new batches vs. metadata-only updates
-        const batchId = rawPicks.map(p => p.id).join(',');
+        if (rawPicks.length > 0) {
+          // Check if the loaded picks match the user's current profile gender
+          const gender = (profile?.gender || '').toLowerCase().trim();
+          const mismatch = (
+            ((gender === 'male' || gender === 'man' || gender === 'men') && !rawPicks[0]?.id?.startsWith('m')) ||
+            ((gender === 'female' || gender === 'woman' || gender === 'women') && !rawPicks[0]?.id?.startsWith('wt'))
+          );
 
-        const localCatalog = getCatalogByGender(profile?.gender);
-        const resolvedPicks = rawPicks.map((p, idx) => {
-          const match = localCatalog.find(c => c.id === p.id);
-
-          // Merge with session cache to avoid overwriting generated images on tab switches
-          let cachedUrl = null;
-          let cachedStatus = null;
-          if (_session.batchId === batchId && _session.picks) {
-            const cachedPick = _session.picks.find(cp => cp.id === p.id);
-            if (cachedPick) {
-              cachedUrl = cachedPick.tryOnImageUrl;
-              cachedStatus = cachedPick.generationStatus;
-            }
+          if (mismatch) {
+            console.log('[Discover] Gender mismatch detected in Firestore picks. Regenerating...');
+            loadGenderCatalog();
+            return;
           }
 
-          // Ignore p.tryOnImageUrl from Firestore to always generate fresh images instead of loading stale/failed database records.
-          // We still use cachedUrl so browser session tab-switching is instant and doesn't regenerate.
-          const tryOnImageUrl = cachedUrl || null;
-          const pickData = match
-            ? { ...p, imageUrl: match.imageUrl, tryOnImageUrl, brand: match.brand, title: match.title, priceINR: match.priceINR, buyLink: match.buyLink || '', category: match.category || 'upper_body', gender: match.gender }
-            : { ...p, tryOnImageUrl };
+          // Build a stable batch ID from the pick IDs so we can detect new batches vs. metadata-only updates
+          const batchId = rawPicks.map(p => p.id).join(',');
 
-          const hasImage = !!tryOnImageUrl;
-          return {
-            ...pickData,
-            generationStatus: hasImage ? 'success' : (cachedStatus || (idx === 0 ? 'pending' : 'queued'))
-          };
-        });
+          const localCatalog = getCatalogByGender(profile?.gender);
+          const resolvedPicks = rawPicks.map((p, idx) => {
+            const match = localCatalog.find(c => c.id === p.id);
 
-        setPicks(resolvedPicks);
-        // Only reset to card 0 if this is a genuinely new batch
-        if (currentBatchIdRef.current !== batchId) {
-          setCurrentIndex(0);
-          _session.currentIndex = 0;
+            // Merge with session cache to avoid overwriting generated images on tab switches
+            let cachedUrl = null;
+            let cachedStatus = null;
+            if (_session.batchId === batchId && _session.picks) {
+              const cachedPick = _session.picks.find(cp => cp.id === p.id);
+              if (cachedPick) {
+                cachedUrl = cachedPick.tryOnImageUrl;
+                cachedStatus = cachedPick.generationStatus;
+              }
+            }
+
+            // Load the tryOnImageUrl from Firestore if present, otherwise fall back to session cache
+            const tryOnImageUrl = p.tryOnImageUrl || cachedUrl || null;
+            const pickData = match
+              ? { ...p, imageUrl: match.imageUrl, tryOnImageUrl, brand: match.brand, title: match.title, priceINR: match.priceINR, buyLink: match.buyLink || '', category: match.category || 'upper_body', gender: match.gender }
+              : { ...p, tryOnImageUrl };
+
+            const hasImage = tryOnImageUrl && tryOnImageUrl !== 'failed';
+            const generationStatus = hasImage
+              ? 'success'
+              : (tryOnImageUrl === 'failed'
+                ? 'failed'
+                : (inFlightRef.current.has(idx)
+                  ? 'pending'
+                  : (cachedStatus && cachedStatus !== 'success' ? cachedStatus : (idx === 0 ? 'pending' : 'queued'))));
+
+            // Preload try-on and catalog images so they render instantly when swiping or discarding
+            if (tryOnImageUrl) {
+              const img = new Image();
+              img.src = tryOnImageUrl;
+            }
+            if (match?.imageUrl) {
+              const img = new Image();
+              img.src = match.imageUrl;
+            }
+
+            return {
+              ...pickData,
+              generationStatus
+            };
+          });
+
+          setPicks(resolvedPicks);
+          // Only reset to card 0 if this is a genuinely new batch
+          if (currentBatchIdRef.current !== batchId) {
+            setCurrentIndex(0);
+            _session.currentIndex = 0;
+          }
+          setInitialLoading(false); // Hide the loading screen immediately once data is resolved
+          processAIClassifications(resolvedPicks, batchId);
+        } else {
+          loadGenderCatalog();
         }
-        processAIClassifications(resolvedPicks, batchId);
-      } else {
-        loadGenderCatalog();
+      } catch (err) {
+        console.error('[Discover] Error in snapshot listener:', err);
+        setInitialLoading(false); // Robust fallback: guarantee loading overlay goes away
       }
-
     });
     return () => unsub?.();
   }, [user, profile?.gender, profile?.basePhotoUrl]);
@@ -895,8 +976,8 @@ export default function Discover({ profile, onOpenTrialRoom, onOpenCustomTryOn }
               color: 'rgba(255,255,255,0.5)', fontSize: '14px', lineHeight: 1.5,
               marginBottom: '24px', maxWidth: '260px', margin: '0 auto 24px'
             }}>
-              All 3 outfits generating in parallel.<br />
-              First look arrives in ~5 seconds.
+              All 3 outfits are being styled for you.<br />
+              First look arrives in ~15 seconds.
             </p>
 
             {/* Bouncing dots */}
@@ -1000,7 +1081,7 @@ export default function Discover({ profile, onOpenTrialRoom, onOpenCustomTryOn }
         />
       ) : (
         <div style={{
-          height: '540px', maxWidth: '420px', margin: '0 auto', display: 'flex', flexDirection: 'column', alignItems: 'center',
+          flex: 1, minHeight: 0, maxWidth: '420px', margin: '0 auto', display: 'flex', flexDirection: 'column', alignItems: 'center',
           justifyContent: 'center', textAlign: 'center', padding: '24px', background: '#121212',
           borderRadius: '28px', color: 'white', border: '1px solid rgba(255,255,255,0.15)',
           boxShadow: '0 20px 40px rgba(0,0,0,0.5)'

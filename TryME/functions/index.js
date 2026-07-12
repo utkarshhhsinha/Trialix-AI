@@ -331,7 +331,9 @@ function isValidTryOnResult(resultUrl, garmentUrl, humanB64 = null, garmentB64 =
         const resultDecoded = jpeg.decode(resultBuf, { useTArray: true });
 
         let totalDistHuman = 0;
+        let totalDistTorso = 0;
         let count = 0;
+        let countTorso = 0;
 
         const getPixel = (decoded, xPct, yPct) => {
           const x = Math.floor(xPct * (decoded.width - 1));
@@ -360,15 +362,22 @@ function isValidTryOnResult(resultUrl, garmentUrl, humanB64 = null, garmentB64 =
 
             totalDistHuman += dist;
             count++;
+
+            // Torso region: x between 25% and 75%, y between 35% and 75%
+            if (xPct >= 0.25 && xPct <= 0.75 && yPct >= 0.35 && yPct <= 0.75) {
+              totalDistTorso += dist;
+              countTorso++;
+            }
           }
         }
 
         const avgDistHuman = totalDistHuman / count;
-        console.log(`[AI Validation] Average visual distance from Human Photo: ${avgDistHuman.toFixed(2)}`);
+        const avgDistTorso = totalDistTorso / countTorso;
+        console.log(`[AI Validation] Average visual distance from Human Photo — Total: ${avgDistHuman.toFixed(2)}, Torso: ${avgDistTorso.toFixed(2)}`);
 
-        // If the average distance is less than 12.0, the images are visually almost identical
-        if (avgDistHuman < 12.0) {
-          console.warn(`[AI Validation] ❌ Rejected: Average visual distance from Human is only ${avgDistHuman.toFixed(2)} — AI returned unmodified original image.`);
+        // If the torso distance is less than 20.0, the clothing area has not changed significantly
+        if (avgDistTorso < 20.0) {
+          console.warn(`[AI Validation] ❌ Rejected: Torso visual distance is only ${avgDistTorso.toFixed(2)} — AI returned unmodified original image.`);
           return false;
         }
 
@@ -461,43 +470,51 @@ async function runGeminiStudio(geminiApiKey, humanB64, garmentB64, title, catego
       ? `The person is wearing ONLY the dress from Image 2. No other clothing is visible.`
       : `The person is wearing ONLY the garment from Image 2 on their upper body. Their lower half is unchanged from Image 1.`;
 
-  const prompt = `VIRTUAL TRY-ON AI — YOU MUST GENERATE A NEW IMAGE. DO NOT RETURN THE ORIGINAL.
+  const prompt = `# Virtual Try-On Prompt Template
 
-CRITICAL RULES:
-1. TARGET AREA: Replace the person's ${region} clothing completely.
-2. ERASE OLD CLOTHES FIRST: The original ${stripList} in Image 1 must be 100% REMOVED before drawing the new garment.
-3. NO LAYERING: Do NOT blend or overlay. The old clothes must disappear completely.
-4. DRAW NEW GARMENT: Apply the EXACT garment from Image 2 onto the person's body. Match its color, pattern, fabric, fit perfectly.
-5. EXPOSE SKIN: If Image 2 shows bare arms/shoulders/neck, the person's skin MUST be visible there. Erase old sleeves/necklines.
-6. PRESERVE FACE: Keep face, hair, pose, background 100% identical to Image 1.
-7. ADD WATERMARK: Place a subtle text watermark "styled by 🔍 oraneo" in the bottom-right corner (small, elegant, semi-transparent).
-8. VALIDATE OUTPUT: The output image MUST look visibly different from Image 1. The clothing MUST have changed. DO NOT return Image 1 unmodified.
+Edit this photo (Image 1) by replacing the person's current outfit with the garment shown in Image 2: ${title || 'this item'}.
 
-Garment: ${title || 'item shown in Image 2'}
+STRICT PRESERVATION (do not change):
+- Keep the exact same face, facial features, expression, and skin tone.
+- Keep the exact same body type, body proportions, height, and build — do not slim, bulk up, elongate, or reshape the body in any way.
+- Keep the exact same pose, stance, and camera angle.
+- Keep the exact same hairstyle and hair color.
+- Keep the exact same background, lighting direction, and shadow pattern.
+- Keep any visible skin (arms, neck, midriff, legs) at the same tone and texture as the original photo — do not smooth, retouch, or airbrush the skin.
+- Keep accessories not related to the outfit change (glasses, watch, footwear) unless the new outfit logically requires a change.
 
-IF YOU CANNOT PERFORM THE SWAP, DO NOT RETURN IMAGE 1. Generate a visibly different result or fail.
-Output: Ultra-realistic 4K portrait with watermark "styled by 🔍 oraneo"`;
+GARMENT CHANGE (what to change):
+- Remove the current clothing entirely: the person's original ${stripList} in Image 1 must be 100% REMOVED and ERASED before drawing the new garment. Do NOT layer or overlay.
+- Replace it with the exact garment from Image 2: match its color, pattern, fabric texture, and fit perfectly.
+- Drape the new garment naturally over the person's actual body shape — follow real fabric physics: creases, folds, and stretch should match how this specific fabric would sit on this specific body and pose.
+- Match the garment's shadows and highlights to the existing light source in the photo so it looks like it was photographed in the same room.
+- Render any newly exposed or newly covered skin/limbs realistically and consistently with the rest of the body's tone and lighting.
 
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-preview-image-generation:generateContent?key=${geminiApiKey}`;
+CONTEXT / MOOD:
+- The result should look like a real photo taken in a fitting-room mirror — natural, unedited, candid.
+- Do not add makeup, jewelry, or styling that wasn't in the original.
+- Resolution and photo quality should match the original image.
+
+OUTPUT: A single photorealistic image, same aspect ratio and framing as Image 1.`;
 
   const requestBody = {
     contents: [{
       role: 'user',
       parts: [
-        { text: prompt },
-        { text: '— IMAGE 1: THE PERSON — (replicate this person exactly, only change their clothing)' },
+        { text: 'IMAGE 1 (The Person to Edit):' },
         { inlineData: { mimeType: 'image/jpeg', data: humanB64 } },
-        { text: '— IMAGE 2: THE NEW GARMENT — (this exact item replaces the clothing in the region described above)' },
+        { text: 'IMAGE 2 (The Garment to Apply):' },
         { inlineData: { mimeType: 'image/jpeg', data: garmentB64 } },
+        { text: prompt },
       ],
     }],
     generationConfig: {
       candidateCount: 1,
-      responseModalities: ['TEXT', 'IMAGE'],
-      temperature: useHighTemp ? 0.7 : 0.25, // Higher temp on retry to force different output
+      responseModalities: ['IMAGE'],
+      temperature: useHighTemp ? 0.75 : 0.35,
     },
   };
-
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-preview-image-generation:generateContent?key=${geminiApiKey}`;
   const res = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -551,47 +568,58 @@ async function runVertexAI(humanB64, garmentB64, desc, category, projectId, useH
       ? 'any clothing at all — kurti, top, saree, dupatta, lehenga, palazzos, jeans — everything'
       : 'kurti, kurta, top, shirt, blouse, saree blouse, jacket, dupatta, or any upper-body garment';
 
-  const outputState = isLowerBody
-    ? `The person is wearing their original top, but their bottom garment has been completely replaced by the item from Image 2.`
-    : isDress
-      ? `The person is wearing ONLY the dress from Image 2. No other clothing is visible.`
-      : `The person is wearing ONLY the garment from Image 2 on their upper body. Their lower half is unchanged from Image 1.`;
+  const prompt = `# Virtual Try-On Prompt Template
 
-  const prompt = `VIRTUAL TRY-ON — CRITICAL CLOTHING SWAP INSTRUCTIONS:
-1. TARGET AREA: Replace the person's ${region} clothing.
-2. REMOVE OLD CLOTHING: The original shirt/top the person is wearing in Image 1 (including its patterns, colors, collar, and sleeves) must be 100% REMOVED and ERASED.
-3. NO BLENDING/LAYERING: Do NOT merge, blend, overlay, or layer the garment from Image 2 over the original clothing. The original clothing must be completely gone, not showing underneath or around the new garment.
-4. DRAW NEW GARMENT: Draw the exact garment from Image 2 onto the person's body. Ensure its color, fabric, fit, and style are identical to Image 2.
-5. EXPOSE BARE SKIN: If the garment in Image 2 is sleeveless, short-sleeved, or has a different neckline, the person's arms, shoulders, and chest must be shown as bare skin, completely erasing the original sleeves and neckline.
-6. PRESERVE IDENTITY: Keep the face, hair, smile, head, pose, background, and lighting of the person in Image 1 100% identical and unchanged.
-7. NO DUPLICATES: Do NOT include any second person, model, or face from Image 2.
+Edit this photo (Image 1) by replacing the person's current outfit with the garment shown in Image 2: ${desc || 'this item'}.
 
-Garment: ${desc || 'item in Image 2'}
-Output: Ultra-realistic, pixel-perfect 4K fashion portrait.`;
+STRICT PRESERVATION (do not change):
+- Keep the exact same face, facial features, expression, and skin tone.
+- Keep the exact same body type, body proportions, height, and build — do not slim, bulk up, elongate, or reshape the body in any way.
+- Keep the exact same pose, stance, and camera angle.
+- Keep the exact same hairstyle and hair color.
+- Keep the exact same background, lighting direction, and shadow pattern.
+- Keep any visible skin (arms, neck, midriff, legs) at the same tone and texture as the original photo — do not smooth, retouch, or airbrush the skin.
+- Keep accessories not related to the outfit change (glasses, watch, footwear) unless the new outfit logically requires a change.
+
+GARMENT CHANGE (what to change):
+- Remove the current clothing entirely: the person's original ${stripList} in Image 1 must be 100% REMOVED and ERASED before drawing the new garment. Do NOT layer or overlay.
+- Replace it with the exact garment from Image 2: match its color, pattern, fabric texture, and fit perfectly.
+- Drape the new garment naturally over the person's actual body shape — follow real fabric physics: creases, folds, and stretch should match how this specific fabric would sit on this specific body and pose.
+- Match the garment's shadows and highlights to the existing light source in the photo so it looks like it was photographed in the same room.
+- Render any newly exposed or newly covered skin/limbs realistically and consistently with the rest of the body's tone and lighting.
+
+CONTEXT / MOOD:
+- The result should look like a real photo taken in a fitting-room mirror — natural, unedited, candid.
+- Do not add makeup, jewelry, or styling that wasn't in the original.
+- Resolution and photo quality should match the original image.
+
+OUTPUT: A single photorealistic image, same aspect ratio and framing as Image 1.`;
 
   const requestBody = {
     contents: [{
       role: 'user',
       parts: [
-        { text: prompt },
-        { text: '— IMAGE 1: THE PERSON — (replicate this person exactly, only change their clothing)' },
+        { text: 'IMAGE 1 (The Person to Edit):' },
         { inlineData: { mimeType: 'image/jpeg', data: humanB64 } },
-        { text: '— IMAGE 2: THE NEW GARMENT — (this exact item replaces the clothing in the region described above)' },
+        { text: 'IMAGE 2 (The Garment to Apply):' },
         { inlineData: { mimeType: 'image/jpeg', data: garmentB64 } },
+        { text: prompt },
       ],
     }],
     generationConfig: {
       candidateCount: 1,
-      responseModalities: ['TEXT', 'IMAGE'],
-      temperature: useHighTemp ? 0.7 : 0.25, // Higher temp on retry to force different output
+      responseModalities: ['IMAGE'],
+      temperature: useHighTemp ? 0.75 : 0.35,
     },
   };
 
   const project = projectId || process.env.VERTEX_PROJECT_ID || 'aura-ai-powered-fashion-aura';
-  const location = 'us-central1';
+  const location = 'us-central1'; // Higher quota & better availability than us-east4
 
   const models = [
-    'gemini-2.5-flash-image',
+    'gemini-2.5-flash-image',          // Confirmed available in Vertex AI (Nano Banana)
+    'gemini-2.0-flash-exp',            // Fallback — also supports image generation
+    'gemini-2.0-flash-preview-image-generation', // Last resort fallback
   ];
 
 
@@ -699,22 +727,10 @@ exports.generateTryOn = onCall({
   let outputDataUri = null;
   let lastErr = null;
 
-  // PRIMARY: Vertex AI gemini-2.5-flash-image (GCP credits, scalable)
-  try {
-    logger.log('[AI Backend] PRIMARY: Vertex AI gemini-2.5-flash-image...');
-    outputDataUri = await runVertexAI(humanB64, garmentB64, desc || 'fashion garment', category, projectId);
-    if (outputDataUri && isValidTryOnResult(outputDataUri, garmentB64, humanB64)) {
-      return { tryOnImageUrl: outputDataUri };
-    }
-  } catch (err) {
-    logger.warn('[AI Backend] Vertex AI gemini-2.5-flash-image failed:', err.message);
-    lastErr = err;
-  }
-
-  // FALLBACK: Try Google AI Studio gemini-2.0-flash-preview-image-generation
+  // PRIMARY: Google AI Studio gemini-2.0-flash-preview-image-generation (Free Tier, 15 RPM)
   if (geminiApiKey) {
     try {
-      logger.log('[AI Backend] FALLBACK: Google AI Studio gemini-2.0-flash-preview-image-generation...');
+      logger.log('[AI Backend] PRIMARY: Google AI Studio gemini-2.0-flash-preview-image-generation...');
       outputDataUri = await runGeminiStudio(geminiApiKey, humanB64, garmentB64, desc || 'fashion garment', category);
       if (outputDataUri && isValidTryOnResult(outputDataUri, garmentB64, humanB64)) {
         return { tryOnImageUrl: outputDataUri };
@@ -723,6 +739,18 @@ exports.generateTryOn = onCall({
       logger.warn('[AI Backend] Google AI Studio failed:', studioErr.message);
       lastErr = studioErr;
     }
+  }
+
+  // FALLBACK: Try Vertex AI gemini-2.5-flash-image (GCP credits, 5 RPM)
+  try {
+    logger.log('[AI Backend] FALLBACK: Vertex AI gemini-2.5-flash-image...');
+    outputDataUri = await runVertexAI(humanB64, garmentB64, desc || 'fashion garment', category, projectId);
+    if (outputDataUri && isValidTryOnResult(outputDataUri, garmentB64, humanB64)) {
+      return { tryOnImageUrl: outputDataUri };
+    }
+  } catch (err) {
+    logger.warn('[AI Backend] Vertex AI gemini-2.5-flash-image failed:', err.message);
+    lastErr = err;
   }
 
   // All models failed — return null (not an error) so caller can gracefully skip this pick

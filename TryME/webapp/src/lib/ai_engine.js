@@ -1,11 +1,11 @@
 /**
- * ai_engine.js — oraneo Engine (v32.0 for Web)
+ * ai_engine.js — oraneo Engine (v33.0 for Web)
  *
- * PRIMARY:  Google AI Studio (generativelanguage.googleapis.com)
- *           Model: gemini-2.0-flash-preview-image-generation
- *           Key:   VITE_GEMINI_API_KEY  (preferred) or VITE_FIREBASE_API_KEY
+ * PRIMARY:  Firebase Cloud Function generateTryOn (server-side Vertex AI)
+ *           Model: gemini-2.0-flash-exp (confirmed Vertex AI image generation model)
+ *           Direct browser calls are blocked (403 API key restriction).
  *
- * FALLBACK: Firebase Cloud Function generateTryOn (server-side, same model)
+ * RETRY:    Up to 2 retries on Cloud Function with exponential backoff (5s → 10s)
  */
 
 import { firebaseFunctions, firestore, firebaseAuth, storage } from './firebase';
@@ -19,10 +19,10 @@ const GEMINI_API_KEY =
   import.meta.env?.VITE_FIREBASE_API_KEY ||
   'AIzaSyB9EuogsWeMNyBRFAQi_6rIa4D1rL_Z56Y';
 
-// Google AI Studio endpoint (no Cloud Run / IAM needed, works from browser)
+// Google AI Studio endpoint — kept for reference but blocked by API key restrictions
 const GEMINI_IMAGE_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-preview-image-generation:generateContent?key=${GEMINI_API_KEY}`;
 
-// Vertex AI endpoint as secondary direct-call option
+// Vertex AI endpoint — gemini-2.5-flash-image confirmed available in Vertex AI Model Garden
 const VERTEX_PROJECT_ID = import.meta.env?.VITE_VERTEX_PROJECT_ID || 'aura-ai-powered-fashion-aura';
 const VERTEX_IMAGE_URL = `https://firebasevertexai.googleapis.com/v1beta/projects/${VERTEX_PROJECT_ID}/locations/us-central1/publishers/google/models/gemini-2.5-flash-image:generateContent?key=${GEMINI_API_KEY}`;
 
@@ -31,7 +31,9 @@ export const DAILY_TRYON_LIMIT = 100;
 export const TRYON_BLOCK_DURATION_MS = 12 * 3600 * 1000; // 12 hours
 
 let _quotaBlockedUntil = 0;
-let _directCallsBlocked = false;
+// Direct browser API calls are blocked — the API key has referrer restrictions causing 403.
+// Route all traffic through the Cloud Function which uses server-side Vertex AI credentials.
+const _directCallsBlocked = true;
 
 async function checkQuotaCooldown() {
   const wait = _quotaBlockedUntil - Date.now();
@@ -264,9 +266,9 @@ async function isValidTryOnResult(resultUrl, garmentUrl, humanB64, humanInput, g
             let totalDist = 0;
             for (let i = 0; i < data1.length; i += 4) {
               const dR = data1[i] - data2[i];
-              const dG = data1[i+1] - data2[i+1];
-              const dB = data1[i+2] - data2[i+2];
-              totalDist += Math.sqrt(dR*dR + dG*dG + dB*dB);
+              const dG = data1[i + 1] - data2[i + 1];
+              const dB = data1[i + 2] - data2[i + 2];
+              totalDist += Math.sqrt(dR * dR + dG * dG + dB * dB);
             }
 
             const avg = totalDist / (data1.length / 4);
@@ -324,9 +326,9 @@ async function isValidTryOnResult(resultUrl, garmentUrl, humanB64, humanInput, g
               let totalDist = 0;
               for (let i = 0; i < data1.length; i += 4) {
                 const dR = data1[i] - data2[i];
-                const dG = data1[i+1] - data2[i+1];
-                const dB = data1[i+2] - data2[i+2];
-                totalDist += Math.sqrt(dR*dR + dG*dG + dB*dB);
+                const dG = data1[i + 1] - data2[i + 1];
+                const dB = data1[i + 2] - data2[i + 2];
+                totalDist += Math.sqrt(dR * dR + dG * dG + dB * dB);
               }
 
               const avg = totalDist / (data1.length / 4);
@@ -381,57 +383,54 @@ function buildTryOnRequest(humanB64, garmentB64, desc, category) {
   const isLowerBody = category === 'lower_body';
   const isDress = category === 'dress' || category === 'dresses';
 
-  // Which body region gets replaced
-  const region = isLowerBody ? 'lower body (below waist)'
-    : isDress ? 'entire body (top + bottom)'
-      : 'upper body (torso and arms)';
-
-  // What must NOT be visible from original outfit
   const stripList = isLowerBody
     ? 'pants, trousers, palazzos, skirt, leggings, or any bottom garment'
     : isDress
       ? 'any clothing at all — kurti, top, saree, dupatta, lehenga, palazzos, jeans — everything'
       : 'kurti, kurta, top, shirt, blouse, saree blouse, jacket, dupatta, or any upper-body garment';
 
-  // Concise output-state description
-  const outputState = isLowerBody
-    ? `The person is wearing their original top, but their bottom garment has been completely replaced by the item from Image 2.`
-    : isDress
-      ? `The person is wearing ONLY the dress from Image 2. No other clothing is visible.`
-      : `The person is wearing ONLY the garment from Image 2 on their upper body. Their lower half is unchanged from Image 1.`;
+  const prompt = `# Virtual Try-On Prompt Template
 
-  const prompt = `You are a virtual try-on AI. Your task is to generate a photorealistic image of the PERSON from Image 1 wearing the GARMENT from Image 2.
+Edit this photo (Image 1) by replacing the person's current outfit with the garment shown in Image 2: ${desc || 'this item'}.
 
-STEP-BY-STEP INSTRUCTIONS:
-1. Look at Image 1: this is the PERSON. Memorize their face, hair, skin tone, body shape, pose, and background. DO NOT change anything about them except their clothing.
-2. Look at Image 2: this is ONLY the GARMENT to be worn. Ignore any model or person shown in Image 2 — use ONLY the garment itself.
-3. Remove the person's existing ${stripList} completely from the ${region}. The original clothing must be 100% removed and erased.
-4. NO BLENDING/LAYERING: Do NOT merge, blend, overlay, or layer the garment from Image 2 over the original clothing. The original clothing must be completely gone, not showing underneath or around the new garment.
-5. Dress the person from Image 1 in the exact garment from Image 2: same color, same print, same fabric texture, same design details.
-6. ${outputState}
-7. Ensure natural fit, correct drape, realistic lighting and shadows matching Image 1's lighting.
-8. Output ONLY the single person from Image 1 wearing the new garment. Same pose, same background, same face — only the ${region} clothing changes.
+STRICT PRESERVATION (do not change):
+- Keep the exact same face, facial features, expression, and skin tone.
+- Keep the exact same body type, body proportions, height, and build — do not slim, bulk up, elongate, or reshape the body in any way.
+- Keep the exact same pose, stance, and camera angle.
+- Keep the exact same hairstyle and hair color.
+- Keep the exact same background, lighting direction, and shadow pattern.
+- Keep any visible skin (arms, neck, midriff, legs) at the same tone and texture as the original photo — do not smooth, retouch, or airbrush the skin.
+- Keep accessories not related to the outfit change (glasses, watch, footwear) unless the new outfit logically requires a change.
 
-Garment name: ${desc || 'item shown in Image 2'}
+GARMENT CHANGE (what to change):
+- Remove the current clothing entirely: the person's original ${stripList} in Image 1 must be 100% REMOVED and ERASED before drawing the new garment. Do NOT layer or overlay.
+- Replace it with the exact garment from Image 2: match its color, pattern, fabric texture, and fit perfectly.
+- Drape the new garment naturally over the person's actual body shape — follow real fabric physics: creases, folds, and stretch should match how this specific fabric would sit on this specific body and pose.
+- Match the garment's shadows and highlights to the existing light source in the photo so it looks like it was photographed in the same room.
+- Render any newly exposed or newly covered skin/limbs realistically and consistently with the rest of the body's tone and lighting.
 
-CRITICAL: The output MUST visually look different from Image 1. The ${region} clothing MUST be replaced. If you cannot do the swap, still output the person with a clearly different garment.
-Output: one photorealistic portrait image, high quality, no text, no borders.`;
+CONTEXT / MOOD:
+- The result should look like a real photo taken in a fitting-room mirror — natural, unedited, candid.
+- Do not add makeup, jewelry, or styling that wasn't in the original.
+- Resolution and photo quality should match the original image.
+
+OUTPUT: A single photorealistic image, same aspect ratio and framing as Image 1.`;
 
   return {
     contents: [{
       role: 'user',
       parts: [
-        { text: 'Image 1 — PERSON (preserve everything except clothing):' },
+        { text: 'IMAGE 1 (The Person to Edit):' },
         { inlineData: { mimeType: 'image/jpeg', data: humanB64 } },
-        { text: 'Image 2 — GARMENT ONLY (use only the garment, ignore any model in this image):' },
+        { text: 'IMAGE 2 (The Garment to Apply):' },
         { inlineData: { mimeType: 'image/jpeg', data: garmentB64 } },
         { text: prompt },
       ],
     }],
     generationConfig: {
       candidateCount: 1,
-      responseModalities: ['TEXT', 'IMAGE'],
-      temperature: 0.1,
+      responseModalities: ['IMAGE'],
+      temperature: 0.35,
     },
   };
 }
@@ -686,65 +685,29 @@ async function _runVirtualTryOnImpl(humanInput, garmentUrl, desc, onStatus, forc
 
   onStatus?.('Generating your look…');
 
-  const runGen = async (retryHighTemp = false) => {
-    // ── PRIMARY: Google AI Studio direct browser call
-    if (humanB64Valid && garmentB64Valid && !_directCallsBlocked) {
-      try {
-        const reqBody = buildTryOnRequest(humanB64, garmentB64, desc, category);
-        // On retry, slightly increase temperature for more creative replacement
-        if (retryHighTemp) reqBody.generationConfig.temperature = 0.3;
-        const res = await fetch(GEMINI_IMAGE_URL, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(reqBody),
-        });
-        if (res.status === 429) { const e = new Error('Rate limit'); e.isRateLimit = true; throw e; }
+  const runGen = async () => {
+    // Direct browser calls are blocked (403 API key restriction) — go straight to Cloud Function.
+    console.log('[AI] Routing to Cloud Function generateTryOn (server-side Vertex AI)...');
 
-        const responseText = await res.text();
-        let data;
-        try { data = JSON.parse(responseText); } catch { throw new Error('Invalid JSON response'); }
-        if (!res.ok) {
-          const errMsg = data?.error?.message || `HTTP ${res.status}`;
-          // 403 Forbidden or 400 indicates API restrictions or invalid keys — block future direct calls
-          if (res.status === 403 || res.status === 400) {
-            console.warn('[AI] Direct API key restricted. Blocking direct calls for this session.');
-            _directCallsBlocked = true;
-          }
-          throw new Error(errMsg);
-        }
-
-        const dataUri = extractImageFromResponse(data, 'Google AI Studio');
-        if (dataUri) return dataUri;
-      } catch (studioErr) {
-        if (studioErr.isRateLimit) throw studioErr;
-        console.warn('[AI] Google AI Studio direct failed:', studioErr.message);
-        if (studioErr.message.includes('Failed to fetch') || studioErr.message.includes('NetworkError')) {
-          _directCallsBlocked = true;
-        }
-      }
-
-      // ── SECONDARY: Vertex AI direct browser call
-      if (!_directCallsBlocked) {
-        try {
-          const dataUri = await runVertexDirect(humanB64, garmentB64, desc, category);
-          if (dataUri) return dataUri;
-        } catch (vertexErr) {
-          if (vertexErr.isRateLimit) throw vertexErr;
-          console.warn('[AI] Vertex AI direct failed:', vertexErr.message);
-          if (vertexErr.message.includes('Forbidden') || vertexErr.message.includes('403') || vertexErr.message.includes('Failed to fetch')) {
-            _directCallsBlocked = true;
-          }
-        }
-      }
-    } else {
-      console.log('[AI] Skipping direct calls (CORS blocked or direct calls disabled). Routing to Cloud Function...');
+    if (!firebaseFunctions) {
+      console.error('[AI] Firebase Functions not initialized.');
+      return null;
     }
 
-    // ── FALLBACK: Firebase Cloud Function (server-side, no CORS issues)
-    if (firebaseFunctions) {
-      console.log('[AI] → Calling Cloud Function generateTryOn…');
+    // ── Cloud Function with exponential backoff retry (handles Vertex AI 429s)
+    const CF_MAX_RETRIES = 2;
+    const CF_BACKOFF_BASE_MS = 5000; // 5s → 10s
+
+    for (let attempt = 0; attempt <= CF_MAX_RETRIES; attempt++) {
+      if (attempt > 0) {
+        const backoff = CF_BACKOFF_BASE_MS * attempt;
+        console.log(`[AI] Cloud Function retry ${attempt}/${CF_MAX_RETRIES} — waiting ${backoff / 1000}s...`);
+        await new Promise(r => setTimeout(r, backoff));
+      }
+
+      console.log(`[AI] → Calling Cloud Function generateTryOn (attempt ${attempt + 1})...`);
       try {
-        const generateTryOn = httpsCallable(firebaseFunctions, 'generateTryOn');
+        const generateTryOn = httpsCallable(firebaseFunctions, 'generateTryOn', { timeout: 120000 });
         const response = await generateTryOn({
           humanB64: humanB64Valid ? humanB64 : undefined,
           garmentB64: garmentB64Valid ? garmentB64 : undefined,
@@ -754,24 +717,40 @@ async function _runVirtualTryOnImpl(humanInput, garmentUrl, desc, onStatus, forc
           category,
           forceGemini,
         });
-        if (response?.data?.tryOnImageUrl) return response.data.tryOnImageUrl;
-        console.warn('[AI] Cloud Function returned no tryOnImageUrl');
+
+        if (response?.data?.tryOnImageUrl) {
+          console.log(`[AI] ✅ Cloud Function succeeded on attempt ${attempt + 1}`);
+          return response.data.tryOnImageUrl;
+        }
+
+        // Cloud Function returned null — server-side Vertex AI was rate-limited
+        console.warn(`[AI] Cloud Function returned no image (attempt ${attempt + 1}) — server-side rate limit.`);
+        if (attempt === CF_MAX_RETRIES) break;
+
       } catch (cfErr) {
-        console.error('[AI] Cloud Function failed:', cfErr.message);
+        const isRetryable =
+          cfErr.code === 'functions/resource-exhausted' ||
+          cfErr.code === 'functions/unavailable' ||
+          cfErr.code === 'functions/deadline-exceeded' ||
+          cfErr.message?.includes('rate') ||
+          cfErr.message?.includes('429') ||
+          cfErr.message?.includes('503');
+
+        console.error(`[AI] Cloud Function failed (attempt ${attempt + 1}): ${cfErr.message}`);
+        if (!isRetryable || attempt === CF_MAX_RETRIES) break;
       }
     }
 
-    // All paths failed — return null (not garmentUrl) so UI can show real error state
     return null;
   };
 
   try {
-    const result = await withTimeout(runGen(false), 35000, 'Try-on');
+    // 90s covers: first attempt (35s) + retry 1 (5s backoff + 35s) + retry 2 (10s backoff + 35s)
+    const result = await withTimeout(runGen(), 90000, 'Try-on');
     if (await isValidTryOnResult(result, garmentHttpUrl, humanB64, actualHumanInput, garmentB64)) {
       return result;
     }
-    // Result invalid — return null without retrying to avoid doubling wait time
-    console.warn('[AI] Attempt produced invalid result — returning null (no retry for speed)');
+    console.warn('[AI] Result failed validation — returning null.');
     return null;
   } catch (e) {
     console.error('[AI Pipeline Error]:', e.message);
