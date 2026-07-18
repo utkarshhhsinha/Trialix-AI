@@ -4,6 +4,7 @@ import {
   Dimensions, ActivityIndicator, Platform, Share, Alert,
   InteractionManager,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Linking from 'expo-linking';
 import * as MediaLibrary from 'expo-media-library';
 import * as FileSystem from 'expo-file-system/legacy';
@@ -120,6 +121,28 @@ export default function DiscoverScreen() {
   }, []);
 
   useEffect(() => {
+    if (!user) return;
+    const checkLocalCooldown = async () => {
+      try {
+        const localCooldown = await AsyncStorage.getItem(`cooldown_${user.uid}`);
+        if (localCooldown) {
+          const nextBatch = Number(localCooldown);
+          if (Date.now() < nextBatch) {
+            setNextBatchAt(nextBatch);
+            setShowDoneModal(true);
+            setStatus('ready');
+          } else {
+            await AsyncStorage.removeItem(`cooldown_${user.uid}`);
+          }
+        }
+      } catch (err) {
+        console.warn('[discover] Failed to check AsyncStorage cooldown:', err.message);
+      }
+    };
+    checkLocalCooldown();
+  }, [user]);
+
+  useEffect(() => {
     if (!user || !firestore) return;
     return onSnapshot(doc(firestore, 'profiles', user.uid), snap => {
       if (snap.exists()) {
@@ -183,13 +206,7 @@ export default function DiscoverScreen() {
         const allPicks = rawPicks.filter(p => p && (p.tryOnImageUrl || p.imageUrl));
         const nextBatch = data.nextBatchAt?.toMillis?.() ?? (data.nextBatchAt?.seconds ? data.nextBatchAt.seconds * 1000 : null);
 
-        // User already saw this batch — show the cooldown done-screen
-        if (data.seenAt && data.status === 'ready' && nextBatch && Date.now() < nextBatch) {
-          setNextBatchAt(nextBatch);
-          setStatus('ready');
-          setShowDoneModal(true);  // show cooldown countdown instead of blank screen
-          return;
-        }
+        // We handle cooldown locally using AsyncStorage now
 
         if (allPicks.length > 0) {
           setPicks(prev => {
@@ -257,6 +274,7 @@ export default function DiscoverScreen() {
         setShowDoneModal(false);
         setPicks([]);
         setStatus('ready');
+        AsyncStorage.removeItem(`cooldown_${user?.uid}`).catch(() => { });
       }
     };
     tick();
@@ -364,7 +382,9 @@ export default function DiscoverScreen() {
     setSwipedCount(c => {
       const next = c + 1;
       if (next >= visiblePicksRef.current.length) {
-        updateDoc(doc(firestore, 'daily_picks', user.uid), { seenAt: serverTimestamp() }).catch(() => { });
+        const cooldownTime = Date.now() + 5 * 60 * 1000;
+        AsyncStorage.setItem(`cooldown_${user?.uid}`, cooldownTime.toString()).catch(() => { });
+        setNextBatchAt(cooldownTime);
         setShowDoneModal(true);
       }
       return next;
@@ -376,7 +396,9 @@ export default function DiscoverScreen() {
     setSwipedCount(c => {
       const next = c + 1;
       if (next >= visiblePicksRef.current.length) {
-        updateDoc(doc(firestore, 'daily_picks', user.uid), { seenAt: serverTimestamp() }).catch(() => { });
+        const cooldownTime = Date.now() + 5 * 60 * 1000;
+        AsyncStorage.setItem(`cooldown_${user?.uid}`, cooldownTime.toString()).catch(() => { });
+        setNextBatchAt(cooldownTime);
         setShowDoneModal(true);
       }
       return next;
@@ -406,7 +428,9 @@ export default function DiscoverScreen() {
     setSwipedCount(c => {
       const next = c + 1;
       if (next >= visiblePicksRef.current.length) {
-        updateDoc(doc(firestore, 'daily_picks', user.uid), { seenAt: serverTimestamp() }).catch(() => { });
+        const cooldownTime = Date.now() + 5 * 60 * 1000;
+        AsyncStorage.setItem(`cooldown_${user?.uid}`, cooldownTime.toString()).catch(() => { });
+        setNextBatchAt(cooldownTime);
         setShowDoneModal(true);
       }
       return next;
@@ -452,6 +476,7 @@ export default function DiscoverScreen() {
               seenAt: null,
               nextBatchAt: null
             });
+            await AsyncStorage.removeItem(`cooldown_${user.uid}`).catch(() => { });
 
             setPicks([]);
             setSwipedCount(0);
@@ -493,9 +518,10 @@ export default function DiscoverScreen() {
     // (null → tryOnImageUrl) are reflected even while SwipeDeck holds a stale card reference
     const liveCard = picksRef.current.find(p => p.id === card.id) || card;
     const isGenerating = !liveCard.tryOnImageUrl;
-    const placeholderSource = typeof liveCard.imageUrl === 'string'
-      ? { uri: liveCard.imageUrl }
-      : liveCard.imageUrl;
+    const basePhotoUrl = profile?.basePhotoUrl || liveCard.imageUrl;
+    const placeholderSource = typeof basePhotoUrl === 'string'
+      ? { uri: basePhotoUrl }
+      : basePhotoUrl;
     return (
       <View style={s.card}>
         {/* CardReveal: shows logo animation when try-on image first arrives */}
