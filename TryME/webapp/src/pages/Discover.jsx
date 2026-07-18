@@ -481,12 +481,18 @@ export default function Discover({ profile, onOpenTrialRoom, onOpenCustomTryOn }
           rawPicks = Object.keys(data.picks).sort((a, b) => Number(a) - Number(b)).map(k => data.picks[k]);
         }
 
-        const nextBatch = data.nextBatchAt?.toMillis?.() ?? (data.nextBatchAt?.seconds ? data.nextBatchAt.seconds * 1000 : null);
-        if (data.seenAt && data.status === 'ready' && nextBatch && Date.now() < nextBatch) {
-          setNextBatchAt(nextBatch);
-          setShowDoneModal(true);
-          setInitialLoading(false); // Hide overlay so Done modal is visible!
-          return;
+        const localCooldownKey = `cooldown_${user.uid}`;
+        const localCooldown = localStorage.getItem(localCooldownKey);
+        if (localCooldown) {
+          const nextBatch = Number(localCooldown);
+          if (Date.now() < nextBatch) {
+            setNextBatchAt(nextBatch);
+            setShowDoneModal(true);
+            setInitialLoading(false); // Hide overlay so Done modal is visible!
+            return;
+          } else {
+            localStorage.removeItem(localCooldownKey);
+          }
         }
 
         if (rawPicks.length > 0) {
@@ -583,6 +589,10 @@ export default function Discover({ profile, onOpenTrialRoom, onOpenCustomTryOn }
       tryOnImageUrl: null
     }));
 
+    if (user) {
+      localStorage.removeItem(`cooldown_${user.uid}`);
+    }
+
     if (user && firestore) {
       await setDoc(doc(firestore, 'daily_picks', user.uid), {
         status: 'ready',
@@ -623,16 +633,11 @@ export default function Discover({ profile, onOpenTrialRoom, onOpenCustomTryOn }
 
     // When all 3 are done, write seenAt and nextBatchAt to trigger the cooldown batch timer page
     if (nextIdx >= 3 || nextIdx >= picks.length) {
-      if (user && firestore) {
-        try {
-          await updateDoc(doc(firestore, 'daily_picks', user.uid), {
-            seenAt: serverTimestamp(),
-            nextBatchAt: new Date(Date.now() + 5 * 60 * 1000)
-          });
-        } catch (err) {
-          console.warn('[Discover] Failed to write seenAt/nextBatchAt for daily_picks cooldown:', err);
-        }
+      const cooldownTime = Date.now() + 5 * 60 * 1000;
+      if (user) {
+        localStorage.setItem(`cooldown_${user.uid}`, cooldownTime.toString());
       }
+      setNextBatchAt(cooldownTime);
       setShowDoneModal(true);
     }
   };
